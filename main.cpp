@@ -87,7 +87,10 @@ int main() {
         ImGui::Text("Y: %02X", cpu.Y);
         ImGui::Text("SP: %02X", cpu.SP);
         ImGui::Text("PC: %04X", cpu.PC);
-        ImGui::Text("P: %02X", cpu.P);
+        ImGui::Separator();
+        ImGui::Text("Status Flags:");
+        cpu.drawFlagsGui();
+        ImGui::Separator();
 
         if (ImGui::Button("Step CPU")) {
             cpu.execute();
@@ -106,6 +109,15 @@ int main() {
             ImGui::SameLine();
             ImGui::Text("%02X ", bus.ram[i]);
         }
+
+        ImGui::End();
+
+        // ------------------------
+        // Stack Viewer
+        // ------------------------
+        ImGui::Begin("Stack");
+
+        cpu.drawStackGui();
 
         ImGui::End();
 

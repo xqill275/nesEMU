@@ -49,11 +49,14 @@ public:
     uint8_t read(uint16_t addr);
     void write(uint16_t addr, uint8_t data);
 
-    void loadLdaTest();
+    // GUI STUFF:
+    void drawStackGui();
+    void drawFlagsGui() const;
 
 
 private:
     std::map<uint8_t, void(cpu::*)()> opcodeMap = {
+        {0x00, &cpu::BRK},
         // --- LDA ---
         {0xA9, &cpu::LDA_Immediate},   // Immediate
         {0xA5, &cpu::LDA_ZeroPage},    // Zero Page
@@ -64,7 +67,24 @@ private:
         {0xA1, &cpu::LDA_indirectX},   // (Indirect,X)
         {0xB1, &cpu::LDA_indirectY},   // (Indirect),Y
 
+        // --- LDX ---
+        {0xA2, &cpu::LDX_Immediate},
+        {0xA6, &cpu::LDX_ZeroPage},
+        {0xB6, &cpu::LDX_ZeroPageY},
+        {0xAE, &cpu::LDX_absolute},
+        {0xBE, &cpu::LDX_absoluteY},
+
+        // --- LDY ---
+        {0xA0, &cpu::LDY_Immediate},
+        {0xA4, &cpu::LDY_ZeroPage},
+        {0xB4, &cpu::LDY_ZeroPageX},
+        {0xAC, &cpu::LDY_absolute},
+        {0xBC, &cpu::LDY_absoluteX},
+
     };
+
+    //BRK
+    void BRK();
 
     // LDA
     void LDA_Immediate();
@@ -75,6 +95,23 @@ private:
     void LDA_absoluteY();
     void LDA_indirectX();
     void LDA_indirectY();
+
+    //LDX
+    void LDX_Immediate();
+    void LDX_ZeroPage();
+    void LDX_ZeroPageY();
+    void LDX_absolute();
+    void LDX_absoluteY();
+
+    //LDY
+    void LDY_Immediate();
+    void LDY_ZeroPage();
+    void LDY_ZeroPageX();
+    void LDY_absolute();
+    void LDY_absoluteX();
+
+
+
 
 
 
