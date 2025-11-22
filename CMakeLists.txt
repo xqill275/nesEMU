@@ -30,6 +30,7 @@ set(IMGUI_SRC
 
         src/external/imgui/backends/imgui_impl_glfw.cpp
         src/external/imgui/backends/imgui_impl_opengl3.cpp
+        src/Mappers/Mapper000.h
 )
 
 add_library(imgui STATIC ${IMGUI_SRC})
@@ -48,6 +49,12 @@ set(SOURCES
         src/Bus.cpp
         src/cpu.cpp
         main.cpp
+        src/cartridge.cpp
+        src/header/cartridge.h
+        src/Mappers/Mapper000.h
+        src/mapper.cpp
+        src/header/mapper.h
+        src/Mappers/Mapper000.cpp
 )
 
 # Create executable (IMPORTANT!)

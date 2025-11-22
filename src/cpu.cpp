@@ -69,7 +69,13 @@ uint8_t cpu::IZY() {
 uint8_t cpu::REL() { addr_rel = (int8_t)read(PC+1); return 0; }
 
 // Operations
-uint8_t cpu::XXX() { return 0; }
+uint8_t cpu::XXX() {
+    std::cout << "Unknown opcode: $"
+              << std::hex << (int)opcode
+              << " at PC $"
+              << std::hex << PC << "\n";
+    return 0;
+}
 
 uint8_t cpu::NOP() {
     // Official NOP does nothing; some NOP opcodes have extra cycles but that's fine for now
@@ -89,6 +95,12 @@ uint8_t cpu::BRK() {
     uint16_t lo = read(0xFFFE);
     uint16_t hi = read(0xFFFF);
     PC = (hi << 8) | lo;
+    return 0;
+}
+
+uint8_t cpu::ORA() {
+    A = A | fetched;
+    setZN(A);
     return 0;
 }
 
@@ -124,6 +136,9 @@ uint8_t cpu::TAY() { Y = A; setZN(Y); return 0; }
 uint8_t cpu::TXA() { A = X; setZN(A); return 0; }
 uint8_t cpu::TYA() { A = Y; setZN(A); return 0; }
 
+uint8_t cpu::TXS() { SP = X; return 0; };
+
+
 uint8_t cpu::INX() { X++; setZN(X); return 0; }
 uint8_t cpu::INY() { Y++; setZN(Y); return 0; }
 uint8_t cpu::DEX() { X--; setZN(X); return 0; }
@@ -155,6 +170,56 @@ uint8_t cpu::RTS() {
     PC++;
     return 0;
 }
+
+// set clear
+
+uint8_t cpu::SEI() {
+    setFlag(I, true);// Set Interrupt Disable flag
+    return 0;           // SEI always takes the base number of cycles
+}
+
+uint8_t cpu::CLD() {
+    setFlag(D, false);
+    return 0;
+}
+
+uint8_t cpu::CLC() {
+    setFlag(C, false);
+    return 0;
+}
+
+uint8_t cpu::ASL() {
+    if (lookup[opcode].addrmode == &cpu::IMM) {
+        setFlag(C, (A & 0x80));
+        A <<=1;
+        setZN(A);
+    } else {
+        uint8_t temp = fetched;
+        setFlag(C, (temp &0x80));
+        temp <<=1;
+
+        write(addr_abs, temp);
+    }
+    return 0;
+}
+
+uint8_t cpu::PHP() {
+    push(P);
+    return 0;
+}
+
+uint8_t cpu::BPL() {
+    if (getFlag(N) == 0) {
+        cycles++;
+        uint16_t oldPC = PC;
+        PC += addr_rel;
+        if ((PC & 0xFF00) != (oldPC & 0xFF00)) {
+            cycles++;
+        }
+    }
+    return 0;
+}
+
 
 // ---------------- Clock / instruction flow ----------------
 // Simple clock implementation that executes one instruction when cycles == 0.
@@ -265,6 +330,8 @@ void cpu::buildLookup() {
     lookup[0x8A] = {"TXA", &cpu::TXA, &cpu::IMP, 2};
     lookup[0x98] = {"TYA", &cpu::TYA, &cpu::IMP, 2};
 
+    lookup[0x9A] = {"TXS", &cpu::TXS, &cpu::IMP, 2};
+
     // INX/INY/DEX/DEY
     lookup[0xE8] = {"INX", &cpu::INX, &cpu::IMP, 2};
     lookup[0xC8] = {"INY", &cpu::INY, &cpu::IMP, 2};
@@ -275,6 +342,34 @@ void cpu::buildLookup() {
     lookup[0x4C] = {"JMP", &cpu::JMP, &cpu::ABS, 3};
     lookup[0x20] = {"JSR", &cpu::JSR, &cpu::ABS, 6};
     lookup[0x60] = {"RTS", &cpu::RTS, &cpu::IMP, 6};
+
+    // flag set/clear
+    lookup[0x78] = {"SEI", &cpu::SEI, &cpu::IMP, 2};
+    lookup[0xD8] = {"CLD", &cpu::CLD, &cpu::IMP, 2};
+    lookup[0x18] = {"CLC", &cpu::CLC, &cpu::IMP, 2};
+
+    //ORA
+    lookup[0x09] = {"ORA", &cpu::ORA, &cpu::IMM, 2};
+    lookup[0x05] = {"ORA", &cpu::ORA, &cpu::ZP0, 3};
+    lookup[0x15] = {"ORA", &cpu::ORA, &cpu::ZPX, 4};
+    lookup[0x15] = {"ORA", &cpu::ORA, &cpu::ABS, 4};
+    lookup[0x0D] = {"ORA", &cpu::ORA, &cpu::ABX, 4};
+    lookup[0x1D] = {"ORA", &cpu::ORA, &cpu::ABY, 4};
+    lookup[0x01] = {"ORA", &cpu::ORA, &cpu::IZX, 2};
+    lookup[0x11] = {"ORA", &cpu::ORA, &cpu::IZY, 2};
+
+    //ASL
+    lookup[0x0A] = {"ASL", &cpu::ASL, &cpu::IMM, 2 };
+    lookup[0x06] = {"ASL", &cpu::ASL, &cpu::ZP0, 5} ;
+    lookup[0x16] = {"ASL", &cpu::ASL, &cpu::ZPX, 6 };
+    lookup[0x0E] = {"ASL", &cpu::ASL, &cpu::ABS, 6};
+    lookup[0x1E] = {"ASL", &cpu::ASL, &cpu::ABX, 7};
+
+    //php
+    lookup[0x08] = {"PHP", &cpu::PHP, &cpu::IMM, 3};
+
+    //BPL
+    lookup[0x10] = {"BPL", &cpu::BPL, &cpu::REL, 2};
 
     // NOP
     lookup[0xEA] = {"NOP", &cpu::NOP, &cpu::IMP, 2};
