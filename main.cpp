@@ -93,7 +93,7 @@ int main() {
         ImGui::Separator();
 
         if (ImGui::Button("Step CPU")) {
-            cpu.execute();
+            cpu.stepInstruction();
         }
 
         ImGui::End();

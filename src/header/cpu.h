@@ -1,123 +1,114 @@
-//
-// Created by olive on 21/11/2025.
-//
-
 #ifndef CPU_H
 #define CPU_H
+
 #include <cstdint>
-#include <map>
 #include <array>
+#include <string>
 
 class bus;
 
 
+struct Instruction {
+    std::string name;
+    uint8_t *bytes; // placeholder (not used at runtime)
+    uint8_t cycles;
+    // We'll store function pointers in the cpp to avoid header pollution
+};
+
 class cpu {
 public:
-
-    uint16_t PC = 0; // program counter
-    uint8_t SP = 0; // stack pointer
-    uint8_t A = 0; // accumulator
-    uint8_t X = 0; // X register
-    uint8_t Y = 0; // Y register
-    uint8_t P = 0x24; // proccessor status
+    cpu();
 
 
+    // Registers
+    uint16_t PC = 0;
+    uint8_t SP = 0;
+    uint8_t A = 0;
+    uint8_t X = 0;
+    uint8_t Y = 0;
+    uint8_t P = 0x24; // status
 
+
+    // helper
     enum FLAGS {
-        CARRY = (1 << 0),
-        ZERO = (1 << 1),
-        INTERRUPT = (1 << 2),
-        DECIMAL = (1 << 3),
-        BREAK = (1 << 4),
-        UNUSED = (1 << 5),
-        OVERFLOW_ = (1 << 6),
-        NEGATIVE = (1 << 7)
-    };
-    bus* connectedBus = nullptr;
+        C = (1 << 0),
+        Z = (1 << 1),
+        I = (1 << 2),
+        D = (1 << 3),
+        B = (1 << 4),
+        U = (1 << 5),
+        V = (1 << 6),
+        N = (1 << 7)
+        };
+
+
+    // bus
+    bus* bus_ptr = nullptr;
     void connectBus(bus* bus);
-    void displayRegisters() const;
-    void setFlag(FLAGS flag, bool value);
-    bool getFlag(FLAGS flag) const;
-    void execute();
-    void reset();
 
-    void testFillMemorywithstuff();
+    // public API
+    void reset(); // reset CPU (reads vector)
+    void clock(); // execute cycles (cycle-based)
+    void stepInstruction(); // execute single instruction
 
-    uint16_t getPC();
 
-    // BUS ACCSESS
+    // read/write through bus
     uint8_t read(uint16_t addr);
     void write(uint16_t addr, uint8_t data);
 
-    // GUI STUFF:
-    void drawStackGui();
-    void drawFlagsGui() const;
 
+    // GUI helpers
+    void drawFlagsGui() const;
+    void drawStackGui() const;
 
 private:
-    std::map<uint8_t, void(cpu::*)()> opcodeMap = {
-        {0x00, &cpu::BRK},
-        // --- LDA ---
-        {0xA9, &cpu::LDA_Immediate},   // Immediate
-        {0xA5, &cpu::LDA_ZeroPage},    // Zero Page
-        {0xB5, &cpu::LDA_ZeroPageX},   // Zero Page,X
-        {0xAD, &cpu::LDA_absolute},    // Absolute
-        {0xBD, &cpu::LDA_absoluteX},   // Absolute,X
-        {0xB9, &cpu::LDA_absoluteY},   // Absolute,Y
-        {0xA1, &cpu::LDA_indirectX},   // (Indirect,X)
-        {0xB1, &cpu::LDA_indirectY},   // (Indirect),Y
+    // internal
+    uint8_t fetched = 0; // holds fetched data
+    uint16_t addr_abs = 0; // absolute address computed by addrmode
+    uint16_t addr_rel = 0; // relative address for branches
+    uint8_t opcode = 0;
+    uint8_t cycles = 0;
 
-        // --- LDX ---
-        {0xA2, &cpu::LDX_Immediate},
-        {0xA6, &cpu::LDX_ZeroPage},
-        {0xB6, &cpu::LDX_ZeroPageY},
-        {0xAE, &cpu::LDX_absolute},
-        {0xBE, &cpu::LDX_absoluteY},
 
-        // --- LDY ---
-        {0xA0, &cpu::LDY_Immediate},
-        {0xA4, &cpu::LDY_ZeroPage},
-        {0xB4, &cpu::LDY_ZeroPageX},
-        {0xAC, &cpu::LDY_absolute},
-        {0xBC, &cpu::LDY_absoluteX},
+    // helpers
+    inline void setFlag(FLAGS f, bool v);
+    inline bool getFlag(FLAGS f) const;
+    inline void setZN(uint8_t v);
 
+
+    // stack helpers
+    void push(uint8_t v);
+    uint8_t pop();
+
+
+    // addressing modes
+    uint8_t IMP(); uint8_t IMM(); uint8_t ZP0(); uint8_t ZPX(); uint8_t ZPY();
+    uint8_t ABS(); uint8_t ABX(); uint8_t ABY(); uint8_t IND();
+    uint8_t IZX(); uint8_t IZY(); uint8_t REL();
+
+
+    // operations (a subset; add more following pattern)
+    uint8_t XXX();
+    uint8_t BRK(); uint8_t NOP();
+    uint8_t LDA(); uint8_t LDX(); uint8_t LDY();
+    uint8_t STA();
+    uint8_t TAX(); uint8_t TAY(); uint8_t TXA(); uint8_t TYA();
+    uint8_t INX(); uint8_t INY(); uint8_t DEX(); uint8_t DEY();
+    uint8_t JMP(); uint8_t JSR(); uint8_t RTS();
+
+
+    // lookup table
+    struct Op {
+        const char* name;
+        uint8_t (cpu::*operate)();
+        uint8_t (cpu::*addrmode)();
+        uint8_t cycles;
     };
-
-    //BRK
-    void BRK();
-
-    // LDA
-    void LDA_Immediate();
-    void LDA_ZeroPage();
-    void LDA_ZeroPageX();
-    void LDA_absolute();
-    void LDA_absoluteX();
-    void LDA_absoluteY();
-    void LDA_indirectX();
-    void LDA_indirectY();
-
-    //LDX
-    void LDX_Immediate();
-    void LDX_ZeroPage();
-    void LDX_ZeroPageY();
-    void LDX_absolute();
-    void LDX_absoluteY();
-
-    //LDY
-    void LDY_Immediate();
-    void LDY_ZeroPage();
-    void LDY_ZeroPageX();
-    void LDY_absolute();
-    void LDY_absoluteX();
+    std::array<Op, 256> lookup;
 
 
-
-
-
-
-
+    void buildLookup();
 };
 
 
-
-#endif //CPU_H
+#endif // CPU_H
