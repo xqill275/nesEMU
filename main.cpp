@@ -7,6 +7,7 @@
 
 #include "src/header/cpu.h"
 #include "src/header/Bus.h"
+#include "src/header/cartridge.h"
 
 // ImGui includes
 #include "src/external/imgui/imgui.h"
@@ -63,6 +64,12 @@ int main() {
     cpu.connectBus(&bus);
     bus.connectCpu(&cpu);
 
+
+    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/donkeyKong.nes");   // <-- your .nes file
+
+
+    bus.insertCartridge(&cart);
+
     cpu.reset();
     bus.reset();
 
@@ -87,6 +94,7 @@ int main() {
         ImGui::Text("Y: %02X", cpu.Y);
         ImGui::Text("SP: %02X", cpu.SP);
         ImGui::Text("PC: %04X", cpu.PC);
+        ImGui::Text("P: %04X", cpu.P);
         ImGui::Separator();
         ImGui::Text("Status Flags:");
         cpu.drawFlagsGui();
@@ -95,22 +103,38 @@ int main() {
         if (ImGui::Button("Step CPU")) {
             cpu.stepInstruction();
         }
+        bool running = false;
+        if (ImGui::Button("run CPU")) {
+            running = !running;
+        }
+        if (running == true) {
+            cpu.clock();
+        }
+
 
         ImGui::End();
 
         // ------------------------
         // RAM View
         // ------------------------
-        ImGui::Begin("RAM");
+        ImGui::Begin("Memory (PC View)");
+
+        uint16_t start = cpu.PC;   // starting address in CPU memory space
 
         for (int i = 0; i < 256; i++) {
-            if (i % 16 == 0)
-                ImGui::Text("\n%04X: ", i);
+            uint16_t addr = start + i;
+            uint8_t value = bus.read(addr, true);   // true = readonly mode
+
+            if (i % 16 == 0) {
+                ImGui::Text("\n%04X: ", addr);
+            }
+
             ImGui::SameLine();
-            ImGui::Text("%02X ", bus.ram[i]);
+            ImGui::Text("%02X ", value);
         }
 
         ImGui::End();
+
 
         // ------------------------
         // Stack Viewer
