@@ -16,6 +16,7 @@ public:
     cartridge* cart = nullptr;  // <-- ADD THIS
 
     std::array<uint8_t, 2048> ram = {};
+    std::array<uint8_t, 8> ppu_registers{};
 
     void connectCpu(cpu* cpu);
     void insertCartridge(cartridge* cart);  // <-- ADD THIS
