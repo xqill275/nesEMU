@@ -65,14 +65,14 @@ int main() {
     bus.connectCpu(&cpu);
 
 
-    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/donkeyKong.nes");   // <-- your .nes file
+    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/nestest.nes");   // <-- your .nes file
 
 
     bus.insertCartridge(&cart);
 
     cpu.reset();
     bus.reset();
-
+    bool running = false;
     // -----------------------------
     // Main Loop
     // -----------------------------
@@ -107,8 +107,11 @@ int main() {
         if (ImGui::Button("run CPU")) {
             running = !running;
         }
-        if (running == true) {
-            cpu.clock();
+        if (running) {
+            // clock many times per frame so ROM actually progresses
+            for (int i = 0; i < 100; i++) {
+                cpu.clock();
+            }
         }
 
 
@@ -135,7 +138,26 @@ int main() {
 
         ImGui::End();
 
+        // ------------------------
+        // StoredValues Viewer
+        // ------------------------
+        ImGui::Begin("StoredValues");
 
+        uint16_t valuesStart = 0x2000;   // starting address in CPU memory space
+
+        for (int i = 0; i < 256; i++) {
+            uint16_t addr = valuesStart + i;
+            uint8_t value = bus.read(addr, true);   // true = readonly mode
+
+            if (i % 16 == 0) {
+                ImGui::Text("\n%04X: ", addr);
+            }
+
+            ImGui::SameLine();
+            ImGui::Text("%02X ", value);
+        }
+
+        ImGui::End();
         // ------------------------
         // Stack Viewer
         // ------------------------
