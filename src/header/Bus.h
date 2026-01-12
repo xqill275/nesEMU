@@ -5,6 +5,7 @@
 #include <array>
 
 class cpu;
+class ppu;
 class cartridge;
 
 class bus {
@@ -12,18 +13,30 @@ public:
     bus();
     ~bus();
 
+    // Devices
     cpu* connectedCPU = nullptr;
-    cartridge* cart = nullptr;  // <-- ADD THIS
+    ppu* connectedPPU = nullptr;
+    cartridge* cart   = nullptr;
 
-    std::array<uint8_t, 2048> ram = {};
-    std::array<uint8_t, 8> ppu_registers{};
+    // 2KB internal RAM ($0000-$07FF, mirrored)
+    std::array<uint8_t, 2048> ram{};
 
+    // Connections
     void connectCpu(cpu* cpu);
-    void insertCartridge(cartridge* cart);  // <-- ADD THIS
+    void connectPPU(ppu* ppu);
+    void insertCartridge(cartridge* cart);
 
+    // CPU bus interface
     uint8_t read(uint16_t addr, bool readonly = false);
-    void write(uint16_t addr, uint8_t data);
+    void    write(uint16_t addr, uint8_t data);
+
+    // Master clock
+    void clock();
 
     void reset();
+
+private:
+    uint64_t systemClockCounter = 0;
 };
+
 #endif
