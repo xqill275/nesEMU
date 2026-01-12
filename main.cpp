@@ -7,6 +7,7 @@
 
 #include "src/header/cpu.h"
 #include "src/header/Bus.h"
+#include "src/header/ppu.h"
 #include "src/header/cartridge.h"
 
 // ImGui includes
@@ -59,18 +60,18 @@ int main() {
     // Create CPU / BUS
     // -----------------------------
     cpu cpu;
+    ppu ppu;
     bus bus;
 
     cpu.connectBus(&bus);
     bus.connectCpu(&cpu);
+    bus.connectPPU(&ppu);
 
-
-    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/nestest.nes");   // <-- your .nes file
+    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/donkeyKong.nes");   // <-- your .nes file
 
 
     bus.insertCartridge(&cart);
 
-    cpu.reset();
     bus.reset();
     bool running = false;
     // -----------------------------
@@ -101,88 +102,122 @@ int main() {
         ImGui::Separator();
 
         if (ImGui::Button("Step CPU")) {
-            cpu.stepInstruction();
+
+            // If we're already complete, clock until a new instruction starts
+            do {
+                bus.clock();
+            } while (cpu.complete());
+
+            // Now clock until that instruction finishes
+            do {
+                bus.clock();
+            } while (!cpu.complete());
         }
-        bool running = false;
-        if (ImGui::Button("run CPU")) {
+
+
+        if (ImGui::Button(running ? "Pause" : "Run")) {
             running = !running;
         }
+
         if (running) {
-            // clock many times per frame so ROM actually progresses
-            for (int i = 0; i < 100; i++) {
-                cpu.clock();
+            // Run roughly one frame worth of cycles
+            for (int i = 0; i < 30000; i++) {
+                bus.clock();
             }
         }
 
 
-        ImGui::End();
+            ImGui::End();
 
-        // ------------------------
-        // RAM View
-        // ------------------------
-        ImGui::Begin("Memory (PC View)");
+            // ------------------------
+            // RAM View
+            // ------------------------
+            ImGui::Begin("Memory (PC View)");
 
-        uint16_t start = cpu.PC;   // starting address in CPU memory space
+            uint16_t start = cpu.PC;   // starting address in CPU memory space
 
-        for (int i = 0; i < 256; i++) {
-            uint16_t addr = start + i;
-            uint8_t value = bus.read(addr, true);   // true = readonly mode
+            for (int i = 0; i < 256; i++) {
+                uint16_t addr = start + i;
+                uint8_t value = bus.read(addr, true);   // true = readonly mode
 
-            if (i % 16 == 0) {
-                ImGui::Text("\n%04X: ", addr);
+                if (i % 16 == 0) {
+                    ImGui::Text("\n%04X: ", addr);
+                }
+
+                ImGui::SameLine();
+                ImGui::Text("%02X ", value);
             }
 
-            ImGui::SameLine();
-            ImGui::Text("%02X ", value);
+            ImGui::End();
+
+
+            // ------------------------
+            // Stack Viewer
+            // ------------------------
+            ImGui::Begin("Stack");
+
+            cpu.drawStackGui();
+
+            ImGui::End();
+
+            // ------------------------
+            // PPU Viewer
+            // ------------------------
+            ImGui::Begin("PPU");
+
+            ImGui::Text("Registers");
+            ImGui::Separator();
+
+            ImGui::Text("PPUCTRL   ($2000): %02X", ppu.PPUCTRL);
+            ImGui::Text("PPUMASK   ($2001): %02X", ppu.PPUMASK);
+            ImGui::Text("PPUSTATUS ($2002): %02X", ppu.PPUSTATUS);
+            ImGui::Text("OAMADDR ($2003): %02X", ppu.OAMADDR);
+
+
+
+            ImGui::Separator();
+            ImGui::Text("Decoded PPUCTRL");
+
+            ImGui::BulletText("NMI Enable: %s", (ppu.PPUCTRL & 0x80) ? "ON" : "OFF");
+            ImGui::BulletText("Sprite Pattern Table: %s",
+                (ppu.PPUCTRL & 0x08) ? "$1000" : "$0000");
+            ImGui::BulletText("Background Pattern Table: %s",
+                (ppu.PPUCTRL & 0x10) ? "$1000" : "$0000");
+            ImGui::BulletText("Increment Mode: %s",
+                (ppu.PPUCTRL & 0x04) ? "32" : "1");
+
+            ImGui::Separator();
+            ImGui::Text("Internal State");
+
+            ImGui::Text("VRAM Addr: %04X", ppu.vram_addr);
+            ImGui::Text("TRAM Addr: %04X", ppu.tram_addr);
+            ImGui::Text("Addr Latch: %d", ppu.addr_latch);
+
+            ImGui::Separator();
+            ImGui::Text("Timing");
+
+            ImGui::Text("Scanline: %d", ppu.scanline);
+            ImGui::Text("Cycle: %d", ppu.cycle);
+            ImGui::Text("NMI Line: %s", ppu.nmi ? "ASSERTED" : "clear");
+
+            ImGui::End();
+
+            // ------------------------
+            // Rendering
+            // ------------------------
+            ImGui::Render();
+            glClear(GL_COLOR_BUFFER_BIT);
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            glfwSwapBuffers(window);
         }
 
-        ImGui::End();
+        // Cleanup
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
 
-        // ------------------------
-        // StoredValues Viewer
-        // ------------------------
-        ImGui::Begin("StoredValues");
+        glfwDestroyWindow(window);
+        glfwTerminate();
 
-        uint16_t valuesStart = 0x2000;   // starting address in CPU memory space
-
-        for (int i = 0; i < 256; i++) {
-            uint16_t addr = valuesStart + i;
-            uint8_t value = bus.read(addr, true);   // true = readonly mode
-
-            if (i % 16 == 0) {
-                ImGui::Text("\n%04X: ", addr);
-            }
-
-            ImGui::SameLine();
-            ImGui::Text("%02X ", value);
-        }
-
-        ImGui::End();
-        // ------------------------
-        // Stack Viewer
-        // ------------------------
-        ImGui::Begin("Stack");
-
-        cpu.drawStackGui();
-
-        ImGui::End();
-
-        // ------------------------
-        // Rendering
-        // ------------------------
-        ImGui::Render();
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        glfwSwapBuffers(window);
+        return 0;
     }
-
-    // Cleanup
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
-    return 0;
-}

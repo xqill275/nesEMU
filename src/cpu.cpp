@@ -184,7 +184,7 @@ uint8_t cpu::NOP() {
 uint8_t cpu::BRK() {
     // At this point addrmode IMM has already advanced PC past the BRK padding
     // Push program counter (high then low)
-    uint16_t return_addr = PC;
+    uint16_t return_addr = PC+1;
     push((return_addr >> 8) & 0xFF);
     push(return_addr & 0xFF);
 
@@ -436,6 +436,26 @@ void cpu::reset() {
     P = 0x24;
 
     cycles = 8; // warmup cycles
+}
+
+void cpu::nmi() {
+    // Push PC to stack (high byte first)
+    push((PC >> 8) & 0x00FF);
+    push(PC & 0x00FF);
+
+    // Push status register
+    setFlag(B, false);
+    setFlag(U, true);
+    setFlag(I, true);
+    push(P);
+
+    // Read NMI vector ($FFFA-$FFFB)
+    uint16_t lo = read(0xFFFA);
+    uint16_t hi = read(0xFFFB);
+    PC = (hi << 8) | lo;
+
+    // NMI takes 8 cycles
+    cycles = 8;
 }
 
 uint8_t cpu::PLP() {
@@ -710,6 +730,11 @@ uint8_t cpu::SED() {
     return 0;
 }
 
+bool cpu::complete() {
+    return cycles == 0;
+}
+
+
 // -----------------------------------------------------------------------------
 // Lookup builder
 // -----------------------------------------------------------------------------
@@ -814,20 +839,24 @@ void cpu::buildLookup() {
     //BEQ
     lookup[0xF0] = { "BEQ", &cpu::BEQ, &cpu::REL, 2 };
 
+    //BIT
     lookup[0x24] = { "BIT", &cpu::BIT, &cpu::ZP0, 3 };
     lookup[0x2C] = { "BIT", &cpu::BIT, &cpu::ABS, 4 };
 
-
+    //ROL
     lookup[0x2A] = { "ROL", &cpu::ROL, &cpu::IMP, 2 }; // Accumulator
     lookup[0x26] = { "ROL", &cpu::ROL, &cpu::ZP0, 5 };
     lookup[0x36] = { "ROL", &cpu::ROL, &cpu::ZPX, 6 };
     lookup[0x2E] = { "ROL", &cpu::ROL, &cpu::ABS, 6 };
     lookup[0x3E] = { "ROL", &cpu::ROL, &cpu::ABX, 7 };
 
+    //PLP
     lookup[0x28] = { "PLP", &cpu::PLP, &cpu::IMP, 4 };
 
+    //SEC
     lookup[0x38] = { "SEC", &cpu::SEC, &cpu::IMP, 2 };
 
+    //EOR
     lookup[0x49] = { "EOR", &cpu::EOR, &cpu::IMM, 2 };
     lookup[0x45] = { "EOR", &cpu::EOR, &cpu::ZP0, 3 };
     lookup[0x55] = { "EOR", &cpu::EOR, &cpu::ZPX, 4 };
@@ -837,20 +866,26 @@ void cpu::buildLookup() {
     lookup[0x41] = { "EOR", &cpu::EOR, &cpu::IZX, 6 };
     lookup[0x51] = { "EOR", &cpu::EOR, &cpu::IZY, 5 }; // +1 if page crossed
 
+    //LSR
     lookup[0x4A] = { "LSR", &cpu::LSR, &cpu::IMP, 2 };
     lookup[0x46] = { "LSR", &cpu::LSR, &cpu::ZP0, 5 };
     lookup[0x56] = { "LSR", &cpu::LSR, &cpu::ZPX, 6 };
     lookup[0x4E] = { "LSR", &cpu::LSR, &cpu::ABS, 6 };
     lookup[0x5E] = { "LSR", &cpu::LSR, &cpu::ABX, 7 };
 
+    //PHA
     lookup[0x48] = { "PHA", &cpu::PHA, &cpu::IMP, 3 };
 
+    //RTI
     lookup[0x40] = { "RTI", &cpu::RTI, &cpu::IMP, 6 };
 
+    //BVC
     lookup[0x50] = { "BVC", &cpu::BVC, &cpu::REL, 2 };
 
+    //CLI
     lookup[0x58] = { "CLI", &cpu::CLI, &cpu::IMP, 2 };
 
+    //ADC
     lookup[0x69] = {"ADC", &cpu::ADC, &cpu::IMM, 2};
     lookup[0x65] = {"ADC", &cpu::ADC, &cpu::ZP0, 3};
     lookup[0x75] = {"ADC", &cpu::ADC, &cpu::ZPX, 4};

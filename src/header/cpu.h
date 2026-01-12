@@ -13,7 +13,7 @@ class bus;
 struct Instruction {
     std::string name;
     uint8_t* bytes;   // not used
-    uint8_t cycles;
+    uint16_t cycles;
 };
 
 // -----------------------------------------------------------------------------
@@ -59,6 +59,7 @@ public:
     void reset();             // Reset CPU (load vectors)
     void clock();             // Execute one CPU cycle
     void stepInstruction();   // Execute exactly one instruction
+    void nmi();
     uint8_t fetch();          // Fetch operand based on addressing mode
 
     // Bus read/write
@@ -68,6 +69,8 @@ public:
     // GUI (you kept these in)
     void drawFlagsGui() const;
     void drawStackGui() const;
+
+    bool complete();
 
 private:
     // -------------------------------------------------------------------------
