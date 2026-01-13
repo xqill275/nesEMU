@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <array>
+#include <vector>
 
 class cartridge;
 
@@ -14,6 +15,11 @@ public:
     uint8_t cpuRead(uint16_t addr, bool readonly = false);
     void    cpuWrite(uint16_t addr, uint8_t data);
 
+    uint8_t ppuRead(uint16_t addr);
+    void    ppuWrite(uint16_t addr, uint8_t data);
+
+    void updatePatternTable();
+
     // PPU clock (called 3x per CPU clock later)
     void clock();
 
@@ -22,6 +28,12 @@ public:
 
     // Attach cartridge (CHR ROM/RAM access)
     void connectCartridge(cartridge* cart);
+
+    std::array<uint8_t, 2048> vram{};
+    std::array<uint8_t, 32> palette{};
+    // Pattern table visualization (128x128 per table)
+    std::vector<uint32_t> patternTable[2];
+
 
     // PPU registers
     uint8_t PPUCTRL   = 0x00;  // $2000
