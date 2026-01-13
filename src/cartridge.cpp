@@ -66,3 +66,28 @@ bool cartridge::cpuWrite(uint16_t addr, uint8_t data)
     }
     return false;
 }
+
+bool cartridge::ppuRead(uint16_t addr, uint8_t& data)
+{
+    uint32_t mappedAddr = 0;
+
+    if (mapper->ppuMapRead(addr, mappedAddr)) {
+        data = chrRom[mappedAddr];
+        return true;
+    }
+
+    return false;
+}
+
+bool cartridge::ppuWrite(uint16_t addr, uint8_t data)
+{
+    uint32_t mappedAddr = 0;
+
+    if (mapper->ppuMapWrite(addr, mappedAddr)) {
+        // Only valid for CHR RAM (not ROM)
+        chrRom[mappedAddr] = data;
+        return true;
+    }
+
+    return false;
+}

@@ -67,7 +67,19 @@ int main() {
     bus.connectCpu(&cpu);
     bus.connectPPU(&ppu);
 
-    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/donkeyKong.nes");   // <-- your .nes file
+    // -----------------------------
+    // Create PPU Pattern Table Textures (ONCE)
+    // -----------------------------
+    GLuint patternTex[2];
+    glGenTextures(2, patternTex);
+
+    for (int i = 0; i < 2; i++) {
+        glBindTexture(GL_TEXTURE_2D, patternTex[i]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
+
+    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/donkeykong.nes");   // <-- your .nes file
 
 
     bus.insertCartridge(&cart);
@@ -84,6 +96,28 @@ int main() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+
+
+
+        // ------------------------
+        // Update PPU Pattern Tables
+        // ------------------------
+        ppu.updatePatternTable();
+
+        for (int i = 0; i < 2; i++) {
+            glBindTexture(GL_TEXTURE_2D, patternTex[i]);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA,
+                128,
+                128,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                ppu.patternTable[i].data()
+            );
+        }
 
         // ------------------------
         //  CPU Window
@@ -150,6 +184,31 @@ int main() {
 
             ImGui::End();
 
+        // ------------------------
+        // PPU VRAM Viewer
+        // ------------------------
+        ImGui::Begin("PPU VRAM ($2000-$27FF)");
+
+        ImGui::Text("Nametable VRAM (2 KB)");
+        ImGui::Separator();
+
+        ImGui::BeginChild("VRAMScroll", ImVec2(0, 400), true);
+
+        for (int row = 0; row < 2048; row += 16) {
+            uint16_t addr = 0x2000 + row;
+
+            ImGui::Text("%04X:", addr);
+            ImGui::SameLine();
+
+            for (int col = 0; col < 16; col++) {
+                uint8_t value = ppu.vram[row + col];
+                ImGui::SameLine();
+                ImGui::Text("%02X", value);
+            }
+        }
+
+        ImGui::EndChild();
+        ImGui::End();
 
             // ------------------------
             // Stack Viewer
@@ -201,6 +260,27 @@ int main() {
             ImGui::Text("NMI Line: %s", ppu.nmi ? "ASSERTED" : "clear");
 
             ImGui::End();
+
+        // ------------------------
+        // Pattern Table Viewer
+        // ------------------------
+        ImGui::Begin("Pattern Tables");
+
+        ImGui::Text("Pattern Table 0 ($0000)");
+        ImGui::Image(
+            (void*)(intptr_t)patternTex[0],
+            ImVec2(256, 256)
+        );
+
+        ImGui::Separator();
+
+        ImGui::Text("Pattern Table 1 ($1000)");
+        ImGui::Image(
+            (void*)(intptr_t)patternTex[1],
+            ImVec2(256, 256)
+        );
+
+        ImGui::End();
 
             // ------------------------
             // Rendering
