@@ -67,6 +67,32 @@ int main() {
     bus.connectCpu(&cpu);
     bus.connectPPU(&ppu);
 
+
+    // -----------------------------
+    // Create PPU Framebuffer Texture (ONCE)
+    // -----------------------------
+    GLuint framebufferTex;
+    glGenTextures(1, &framebufferTex);
+    glBindTexture(GL_TEXTURE_2D, framebufferTex);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Allocate storage once
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        256,
+        240,
+        0,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        nullptr
+    );
+
     // -----------------------------
     // Create PPU Pattern Table Textures (ONCE)
     // -----------------------------
@@ -79,13 +105,23 @@ int main() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
 
-    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/donkeykong.nes");   // <-- your .nes file
+    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/mario.nes");
+
 
 
     bus.insertCartridge(&cart);
 
     bus.reset();
+    ppu.PPUMASK = 0x18;
     bool running = false;
+
+    bool showCPU = true;
+    bool showMemory = false;
+    bool showStack = false;
+    bool showPPU = true;
+    bool showVRAM = false;
+    bool showPattern = true;
+
     // -----------------------------
     // Main Loop
     // -----------------------------
@@ -97,75 +133,110 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // -----------------------------
+        // Menu Bar
+        // -----------------------------
 
+        if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("View")) {
+                ImGui::MenuItem("CPU", nullptr, &showCPU);
+                ImGui::MenuItem("Memory", nullptr, &showMemory);
+                ImGui::MenuItem("Stack", nullptr, &showStack);
+                ImGui::MenuItem("PPU", nullptr, &showPPU);
+                ImGui::MenuItem("VRAM", nullptr, &showVRAM);
+                ImGui::MenuItem("Pattern Tables", nullptr, &showPattern);
+                ImGui::EndMenu();
+            }
+            ImGui::EndMainMenuBar();
+        }
 
+        ppu.renderBackground();
+        ppu.renderSprites();
+
+        glBindTexture(GL_TEXTURE_2D, framebufferTex);
+        glTexSubImage2D(
+            GL_TEXTURE_2D,
+            0,
+            0,
+            0,
+            256,
+            240,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            ppu.frame.data()
+        );
         // ------------------------
         // Update PPU Pattern Tables
         // ------------------------
-        ppu.updatePatternTable();
+        if (showPattern) {
+            ppu.updatePatternTable();
 
-        for (int i = 0; i < 2; i++) {
-            glBindTexture(GL_TEXTURE_2D, patternTex[i]);
-            glTexImage2D(
-                GL_TEXTURE_2D,
-                0,
-                GL_RGBA,
-                128,
-                128,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                ppu.patternTable[i].data()
-            );
-        }
-
-        // ------------------------
-        //  CPU Window
-        // ------------------------
-        ImGui::Begin("CPU Registers");
-
-        ImGui::Text("A: %02X", cpu.A);
-        ImGui::Text("X: %02X", cpu.X);
-        ImGui::Text("Y: %02X", cpu.Y);
-        ImGui::Text("SP: %02X", cpu.SP);
-        ImGui::Text("PC: %04X", cpu.PC);
-        ImGui::Text("P: %04X", cpu.P);
-        ImGui::Separator();
-        ImGui::Text("Status Flags:");
-        cpu.drawFlagsGui();
-        ImGui::Separator();
-
-        if (ImGui::Button("Step CPU")) {
-
-            // If we're already complete, clock until a new instruction starts
-            do {
-                bus.clock();
-            } while (cpu.complete());
-
-            // Now clock until that instruction finishes
-            do {
-                bus.clock();
-            } while (!cpu.complete());
-        }
-
-
-        if (ImGui::Button(running ? "Pause" : "Run")) {
-            running = !running;
-        }
-
-        if (running) {
-            // Run roughly one frame worth of cycles
-            for (int i = 0; i < 30000; i++) {
-                bus.clock();
+            for (int i = 0; i < 2; i++) {
+                glBindTexture(GL_TEXTURE_2D, patternTex[i]);
+                glTexImage2D(
+                    GL_TEXTURE_2D,
+                    0,
+                    GL_RGBA,
+                    128,
+                    128,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    ppu.patternTable[i].data()
+                );
             }
         }
 
 
+        // ------------------------
+        //  CPU Window
+        // ------------------------
+        if (showCPU) {
+            ImGui::Begin("CPU Registers");
+
+            ImGui::Text("A: %02X", cpu.A);
+            ImGui::Text("X: %02X", cpu.X);
+            ImGui::Text("Y: %02X", cpu.Y);
+            ImGui::Text("SP: %02X", cpu.SP);
+            ImGui::Text("PC: %04X", cpu.PC);
+            ImGui::Text("P: %04X", cpu.P);
+            ImGui::Separator();
+            ImGui::Text("Status Flags:");
+            cpu.drawFlagsGui();
+            ImGui::Separator();
+
+            if (ImGui::Button("Step CPU")) {
+
+                // If we're already complete, clock until a new instruction starts
+                do {
+                    bus.clock();
+                } while (cpu.complete());
+
+                // Now clock until that instruction finishes
+                do {
+                    bus.clock();
+                } while (!cpu.complete());
+            }
+
+
+            if (ImGui::Button(running ? "Pause" : "Run")) {
+                running = !running;
+            }
+
+            if (running) {
+                // Run roughly one frame worth of cycles
+                for (int i = 0; i < 30000; i++) {
+                    bus.clock();
+                }
+            }
             ImGui::End();
+        }
+
 
             // ------------------------
             // RAM View
             // ------------------------
+        if (showMemory) {
             ImGui::Begin("Memory (PC View)");
 
             uint16_t start = cpu.PC;   // starting address in CPU memory space
@@ -183,33 +254,37 @@ int main() {
             }
 
             ImGui::End();
+        }
 
         // ------------------------
         // PPU VRAM Viewer
         // ------------------------
-        ImGui::Begin("PPU VRAM ($2000-$27FF)");
+        if (showVRAM) {
+            ImGui::Begin("PPU VRAM ($2000-$27FF)");
 
-        ImGui::Text("Nametable VRAM (2 KB)");
-        ImGui::Separator();
+            ImGui::Text("Nametable VRAM (2 KB)");
+            ImGui::Separator();
 
-        ImGui::BeginChild("VRAMScroll", ImVec2(0, 400), true);
+            ImGui::BeginChild("VRAMScroll", ImVec2(0, 400), true);
 
-        for (int row = 0; row < 2048; row += 16) {
-            uint16_t addr = 0x2000 + row;
+            for (int row = 0; row < 2048; row += 16) {
+                uint16_t addr = 0x2000 + row;
 
-            ImGui::Text("%04X:", addr);
-            ImGui::SameLine();
-
-            for (int col = 0; col < 16; col++) {
-                uint8_t value = ppu.vram[row + col];
+                ImGui::Text("%04X:", addr);
                 ImGui::SameLine();
-                ImGui::Text("%02X", value);
+
+                for (int col = 0; col < 16; col++) {
+                    uint8_t value = ppu.vram[row + col];
+                    ImGui::SameLine();
+                    ImGui::Text("%02X", value);
+                }
             }
+
+            ImGui::EndChild();
+            ImGui::End();
         }
 
-        ImGui::EndChild();
-        ImGui::End();
-
+        if (showStack) {
             // ------------------------
             // Stack Viewer
             // ------------------------
@@ -218,6 +293,8 @@ int main() {
             cpu.drawStackGui();
 
             ImGui::End();
+        }
+        if (showPPU) {
 
             // ------------------------
             // PPU Viewer
@@ -260,24 +337,36 @@ int main() {
             ImGui::Text("NMI Line: %s", ppu.nmi ? "ASSERTED" : "clear");
 
             ImGui::End();
+        }
 
         // ------------------------
         // Pattern Table Viewer
         // ------------------------
-        ImGui::Begin("Pattern Tables");
+        if (showPattern) {
+            ImGui::Begin("Pattern Tables");
 
-        ImGui::Text("Pattern Table 0 ($0000)");
+            ImGui::Text("Pattern Table 0 ($0000)");
+            ImGui::Image(
+                (void*)(intptr_t)patternTex[0],
+                ImVec2(256, 256)
+            );
+
+            ImGui::Separator();
+
+            ImGui::Text("Pattern Table 1 ($1000)");
+            ImGui::Image(
+                (void*)(intptr_t)patternTex[1],
+                ImVec2(256, 256)
+            );
+
+            ImGui::End();
+        }
+
+        ImGui::Begin("NES Screen");
+
         ImGui::Image(
-            (void*)(intptr_t)patternTex[0],
-            ImVec2(256, 256)
-        );
-
-        ImGui::Separator();
-
-        ImGui::Text("Pattern Table 1 ($1000)");
-        ImGui::Image(
-            (void*)(intptr_t)patternTex[1],
-            ImVec2(256, 256)
+            (void*)(intptr_t)framebufferTex,
+            ImVec2(512, 480)   // scale 2× for readability
         );
 
         ImGui::End();

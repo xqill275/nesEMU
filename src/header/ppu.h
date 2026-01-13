@@ -23,6 +23,9 @@ public:
     // PPU clock (called 3x per CPU clock later)
     void clock();
 
+    void renderBackground();
+    void renderSprites();
+
     // Status
     bool nmi = false;
 
@@ -31,6 +34,8 @@ public:
 
     std::array<uint8_t, 2048> vram{};
     std::array<uint8_t, 32> palette{};
+    std::array<uint32_t, 256 * 240> frame{};
+    std::array<uint8_t, 256> OAM{};
     // Pattern table visualization (128x128 per table)
     std::vector<uint32_t> patternTable[2];
 
