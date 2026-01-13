@@ -37,6 +37,12 @@ public:
 
 private:
     uint64_t systemClockCounter = 0;
+
+    bool     dma_transfer = false;
+    bool     dma_dummy    = true;
+    uint8_t  dma_page     = 0x00;
+    uint8_t  dma_addr     = 0x00;
+    uint8_t  dma_data     = 0x00;
 };
 
 #endif

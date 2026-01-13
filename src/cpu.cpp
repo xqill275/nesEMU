@@ -237,7 +237,7 @@ uint8_t cpu::LDY() {
 
 uint8_t cpu::STA() {
     // store A into addr_abs
-    std::cout << "Writing value: " << std::hex << (int)A << " To:" << addr_abs << std::endl;
+    //std::cout << "Writing value: " << std::hex << (int)A << " To:" << addr_abs << std::endl;
     write(addr_abs, A);
     return 0;
 }
@@ -401,7 +401,7 @@ void cpu::clock() {
         // Fetch opcode at current PC
         opcode = read(PC);
         const Op& ins = lookup[opcode];
-        std::cout << ins.name << " - " << std::hex << (int)opcode << std::endl;
+        //std::cout << ins.name << " - " << std::hex << (int)opcode << std::endl;
         // Run addressing mode (it will advance PC to next instruction by design)
         uint8_t add_cycles_addr = 0;
         if (ins.addrmode) add_cycles_addr = (this->*ins.addrmode)();
@@ -734,6 +734,15 @@ bool cpu::complete() {
     return cycles == 0;
 }
 
+uint8_t cpu::BMI() {
+    if (getFlag(N)) {
+        cycles++;
+        uint16_t oldPC = PC;
+        PC = PC + addr_rel;
+        if ((PC & 0xFF00) != (oldPC & 0xFF00)) cycles++;
+    }
+    return 0;
+}
 
 // -----------------------------------------------------------------------------
 // Lookup builder
@@ -964,7 +973,7 @@ void cpu::buildLookup() {
     // NOP
     lookup[0xEA] = {"NOP", &cpu::NOP, &cpu::IMP, 2};
 
-    // You can continue filling out the rest of the table as needed...
+    lookup[0x30] = {"BMI", &cpu::BMI, &cpu::REL, 2};
 }
 
 // -----------------------------------------------------------------------------
