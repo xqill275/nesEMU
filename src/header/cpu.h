@@ -121,7 +121,7 @@ private:
     uint8_t CPY(); uint8_t CMP(); uint8_t DEC(); uint8_t INY(); uint8_t DEX();
     uint8_t BNE();
     uint8_t CPX(); uint8_t SBC(); uint8_t INC(); uint8_t INX(); uint8_t NOP();
-    uint8_t BEQ(); uint8_t SED(); uint8_t BMI();
+    uint8_t BEQ(); uint8_t SED(); uint8_t BMI(); uint8_t TSX();
 
     uint8_t XXX();   // illegal/unused opcodes
 
