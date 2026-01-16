@@ -249,6 +249,8 @@ uint8_t cpu::TYA() { A = Y; setZN(A); return 0; }
 
 uint8_t cpu::TXS() { SP = X; return 0; }
 
+uint8_t cpu::TSX() { X = SP; return 0; }
+
 uint8_t cpu::INX() { X++; setZN(X); return 0; }
 uint8_t cpu::INY() { Y++; setZN(Y); return 0; }
 uint8_t cpu::DEX() { X--; setZN(X); return 0; }
@@ -794,6 +796,8 @@ void cpu::buildLookup() {
     lookup[0x98] = {"TYA", &cpu::TYA, &cpu::IMP, 2};
 
     lookup[0x9A] = {"TXS", &cpu::TXS, &cpu::IMP, 2};
+
+    lookup[0xBA] = {"TSX", &cpu::TSX, &cpu::IMP, 2};
 
     // INX/INY/DEX/DEY
     lookup[0xE8] = {"INX", &cpu::INX, &cpu::IMP, 2};

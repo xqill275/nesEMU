@@ -105,7 +105,7 @@ int main() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
 
-    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/mario.nes");
+    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/DigDug.nes");
 
 
 
@@ -138,6 +138,10 @@ int main() {
         // -----------------------------
 
         if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                // TODO: add a way to select ROMS
+                ImGui::EndMenu();
+            }
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("CPU", nullptr, &showCPU);
                 ImGui::MenuItem("Memory", nullptr, &showMemory);
