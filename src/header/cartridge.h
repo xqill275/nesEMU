@@ -14,7 +14,6 @@ public:
 
     bool valid = false;
 
-    // PRG & CHR data
     std::vector<uint8_t> prgRom;
     std::vector<uint8_t> chrRom;
 
@@ -22,14 +21,19 @@ public:
     uint8_t prgBanks = 0;
     uint8_t chrBanks = 0;
 
-    // Mapper object
+    enum class Mirror {
+        HORIZONTAL,
+        VERTICAL,
+        FOUR_SCREEN
+    };
+
+    Mirror mirror = Mirror::HORIZONTAL;
+
     std::shared_ptr<Mapper> mapper;
 
-    // CPU interface
     bool cpuRead(uint16_t addr, uint8_t& data);
     bool cpuWrite(uint16_t addr, uint8_t data);
 
-    // PPU interface (we will implement later)
     bool ppuRead(uint16_t addr, uint8_t& data);
     bool ppuWrite(uint16_t addr, uint8_t data);
 };

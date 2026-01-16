@@ -112,7 +112,14 @@ int main() {
     bus.insertCartridge(&cart);
 
     bus.reset();
-    ppu.PPUMASK = 0x18;
+    //ppu.PPUMASK = 0x18;
+
+    // running flags and timing
+    double lastTime = glfwGetTime();
+    double accumulator = 0.0;
+
+    // NTSC NES is ~60.0988 fps. 60.0 is fine for now.
+    const double targetFrameTime = 1.0 / 60.0;
     bool running = false;
 
     bool showCPU = true;
@@ -154,21 +161,37 @@ int main() {
             ImGui::EndMainMenuBar();
         }
 
-        ppu.renderBackground();
-        ppu.renderSprites();
+        if (running) {
+            double now = glfwGetTime();
+            double delta = now - lastTime;
+            lastTime = now;
 
-        glBindTexture(GL_TEXTURE_2D, framebufferTex);
-        glTexSubImage2D(
-            GL_TEXTURE_2D,
-            0,
-            0,
-            0,
-            256,
-            240,
-            GL_RGBA,
-            GL_UNSIGNED_BYTE,
-            ppu.frame.data()
-        );
+            // Avoid huge jumps if you drag the window / breakpoint etc.
+            if (delta > 0.25) delta = 0.25;
+
+            accumulator += delta;
+
+            // Emulate as many frames as we owe (usually 1)
+            while (accumulator >= targetFrameTime) {
+                ppu.frame_complete = false;
+                while (!ppu.frame_complete) {
+                    bus.clock();
+                }
+                accumulator -= targetFrameTime;
+            }
+
+            // Draw the most recent completed frame once per UI iteration
+            ppu.renderBackground();
+            ppu.renderSprites();
+
+            glBindTexture(GL_TEXTURE_2D, framebufferTex);
+            glTexSubImage2D(
+                GL_TEXTURE_2D, 0,
+                0, 0, 256, 240,
+                GL_BGRA, GL_UNSIGNED_BYTE,
+                ppu.frame.data()
+            );
+        }
         // ------------------------
         // Update PPU Pattern Tables
         // ------------------------
@@ -180,11 +203,11 @@ int main() {
                 glTexImage2D(
                     GL_TEXTURE_2D,
                     0,
-                    GL_RGBA,
+                    GL_BGRA,
                     128,
                     128,
                     0,
-                    GL_RGBA,
+                    GL_BGRA,
                     GL_UNSIGNED_BYTE,
                     ppu.patternTable[i].data()
                 );
@@ -225,13 +248,6 @@ int main() {
 
             if (ImGui::Button(running ? "Pause" : "Run")) {
                 running = !running;
-            }
-
-            if (running) {
-                // Run roughly one frame worth of cycles
-                for (int i = 0; i < 30000; i++) {
-                    bus.clock();
-                }
             }
             ImGui::End();
         }
