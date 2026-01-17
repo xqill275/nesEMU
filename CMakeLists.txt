@@ -57,6 +57,7 @@ set(SOURCES
         src/header/mapper.h
         src/Mappers/Mapper000.cpp
         src/ppu.cpp
+        src/header/KeyBinds.h
 )
 
 # Create executable (IMPORTANT!)

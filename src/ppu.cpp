@@ -34,9 +34,8 @@ void ppu::connectCartridge(cartridge* c) {
     cart = c;
 }
 
-// ------------------------------------------------------------
+
 // Mirroring helper: map $2000-$2FFF into vram[0..0x07FF]
-// ------------------------------------------------------------
 uint16_t ppu::mapNametableAddr(uint16_t addr) const {
     // Expect addr in $2000-$2FFF or already mirrored $2000-$2EFF
     // Convert to 0..0x0FFF
@@ -72,9 +71,8 @@ uint16_t ppu::mapNametableAddr(uint16_t addr) const {
     return (page * 0x0400) + offset;
 }
 
-// ------------------------------------------------------------
+
 // CPU <-> PPU registers ($2000-$2007 mirrored)
-// ------------------------------------------------------------
 uint8_t ppu::cpuRead(uint16_t addr, bool readonly) {
     (void)readonly;
 
@@ -182,9 +180,8 @@ void ppu::cpuWrite(uint16_t addr, uint8_t data) {
     }
 }
 
-// ------------------------------------------------------------
-// PPU timing (simplified)
-// ------------------------------------------------------------
+
+// PPU timing
 void ppu::clock() {
     cycle++;
 
@@ -214,9 +211,8 @@ void ppu::clock() {
     }
 }
 
-// ------------------------------------------------------------
+
 // PPU memory map
-// ------------------------------------------------------------
 uint8_t ppu::ppuRead(uint16_t addr) {
     addr &= 0x3FFF;
 
@@ -278,9 +274,8 @@ void ppu::ppuWrite(uint16_t addr, uint8_t data) {
     }
 }
 
-// ------------------------------------------------------------
+
 // Pattern table viewer (for your UI)
-// ------------------------------------------------------------
 void ppu::updatePatternTable() {
     if (!cart) return;
 
@@ -316,9 +311,8 @@ void ppu::updatePatternTable() {
     }
 }
 
-// ------------------------------------------------------------
+
 // Background renderer (frame-based scrolling using tram_addr/fine_x)
-// ------------------------------------------------------------
 void ppu::renderBackground() {
     uint32_t bgColor = nes_colors[ppuRead(0x3F00) & 0x3F];
     frame.fill(bgColor);
@@ -400,9 +394,8 @@ void ppu::renderBackground() {
     }
 }
 
-// ------------------------------------------------------------
+
 // Sprite renderer (supports 8x8 and 8x16)
-// ------------------------------------------------------------
 void ppu::renderSprites() {
     if (!(PPUMASK & 0x10))
         return;

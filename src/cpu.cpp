@@ -13,16 +13,14 @@ void cpu::connectBus(bus* b) { bus_ptr = b; }
 uint8_t cpu::read(uint16_t addr) { return bus_ptr ? bus_ptr->read(addr) : 0x00; }
 void cpu::write(uint16_t addr, uint8_t data) { if (bus_ptr) bus_ptr->write(addr, data); }
 
-// -----------------------------------------------------------------------------
+
 // Helpers
-// -----------------------------------------------------------------------------
 inline void cpu::setFlag(FLAGS f, bool v) { if (v) P |= f; else P &= ~f; }
 inline bool cpu::getFlag(FLAGS f) const { return (P & f) != 0; }
 inline void cpu::setZN(uint8_t v) { setFlag(Z, v == 0); setFlag(N, (v & 0x80) != 0); }
 
-// -----------------------------------------------------------------------------
+
 // Stack
-// -----------------------------------------------------------------------------
 void cpu::push(uint8_t v) {
     write(0x0100 + SP, v);
     SP--;
@@ -33,9 +31,8 @@ uint8_t cpu::pop() {
     return read(0x0100 + SP);
 }
 
-// -----------------------------------------------------------------------------
+
 // Fetch operand (based on addrmode result)
-// -----------------------------------------------------------------------------
 uint8_t cpu::fetch() {
     // If addressing mode is implied, fetched is already set to A by IMP
     if (lookup[opcode].addrmode == &cpu::IMP) {
@@ -46,11 +43,11 @@ uint8_t cpu::fetch() {
     }
 }
 
-// -----------------------------------------------------------------------------
+
 // Addressing modes
 // Each mode reads operand(s) from memory at PC+1/2... and then advances PC to
 // point to the next instruction (so operations can overwrite PC when needed).
-// -----------------------------------------------------------------------------
+
 
 // Implied / Accumulator: some instructions use the accumulator (A) directly,
 // but we don't declare a separate ACC() in the header — IMP is used for both
@@ -163,10 +160,8 @@ uint8_t cpu::REL() {
     return 0;
 }
 
-// -----------------------------------------------------------------------------
-// Operations
-// -----------------------------------------------------------------------------
 
+// Operations
 uint8_t cpu::XXX() {
     std::cout << "Unknown opcode: $"
               << std::hex << (int)opcode
@@ -395,9 +390,8 @@ uint8_t cpu::ROL() {
 
 
 
-// -----------------------------------------------------------------------------
+
 // Clock / instruction flow
-// -----------------------------------------------------------------------------
 void cpu::clock() {
     if (cycles == 0) {
         // Fetch opcode at current PC
@@ -746,9 +740,8 @@ uint8_t cpu::BMI() {
     return 0;
 }
 
-// -----------------------------------------------------------------------------
+
 // Lookup builder
-// -----------------------------------------------------------------------------
 void cpu::buildLookup() {
     // Default to XXX
     for (int i = 0; i < 256; ++i) lookup[i] = {"XXX", &cpu::XXX, &cpu::IMP, 2};
@@ -980,9 +973,8 @@ void cpu::buildLookup() {
     lookup[0x30] = {"BMI", &cpu::BMI, &cpu::REL, 2};
 }
 
-// -----------------------------------------------------------------------------
+
 // GUI helpers (unchanged logic, minor cleanup)
-// -----------------------------------------------------------------------------
 void cpu::drawFlagsGui() const {
     auto draw = [&](const char* label, bool v) {
         ImVec4 c = v ? ImVec4(0.2f,1.0f,0.2f,1.0f) : ImVec4(1.0f,0.2f,0.2f,1.0f);
