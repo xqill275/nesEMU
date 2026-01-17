@@ -112,9 +112,8 @@ void bus::clock() {
     // PPU runs every system clock
     connectedPPU->clock();
 
-    // --------------------------------------------
+
     // DMA steals CPU time but PPU keeps running
-    // --------------------------------------------
     if (dma_transfer) {
 
         // The "dummy" cycle: DMA begins on an even CPU cycle.

@@ -7,25 +7,22 @@
 
 class bus;
 
-// -----------------------------------------------------------------------------
+
 // Optional legacy struct (unused at runtime)
-// -----------------------------------------------------------------------------
 struct Instruction {
     std::string name;
     uint8_t* bytes;   // not used
     uint16_t cycles;
 };
 
-// -----------------------------------------------------------------------------
+
 // 6502 CPU
-// -----------------------------------------------------------------------------
 class cpu {
 public:
     cpu();
 
-    // -------------------------------------------------------------------------
+
     // Registers
-    // -------------------------------------------------------------------------
     uint16_t PC = 0x0000;   // Program Counter
     uint8_t  SP = 0x00;     // Stack Pointer
     uint8_t  A  = 0x00;     // Accumulator
@@ -33,9 +30,8 @@ public:
     uint8_t  Y  = 0x00;     // Y index
     uint8_t  P  = 0x24;     // Status register
 
-    // -------------------------------------------------------------------------
+
     // Flags
-    // -------------------------------------------------------------------------
     enum FLAGS : uint8_t {
         C = (1 << 0),
         Z = (1 << 1),
@@ -47,15 +43,13 @@ public:
         N = (1 << 7)
     };
 
-    // -------------------------------------------------------------------------
+
     // Bus
-    // -------------------------------------------------------------------------
     bus* bus_ptr = nullptr;
     void connectBus(bus* bus);
 
-    // -------------------------------------------------------------------------
+
     // Public API
-    // -------------------------------------------------------------------------
     void reset();             // Reset CPU (load vectors)
     void clock();             // Execute one CPU cycle
     void stepInstruction();   // Execute exactly one instruction
@@ -73,18 +67,16 @@ public:
     bool complete();
 
 private:
-    // -------------------------------------------------------------------------
+
     // Internal fields
-    // -------------------------------------------------------------------------
     uint8_t  fetched   = 0;
     uint16_t addr_abs  = 0;
     uint16_t addr_rel  = 0;
     uint8_t  opcode    = 0;
     uint8_t  cycles    = 0;
 
-    // -------------------------------------------------------------------------
+
     // Helpers
-    // -------------------------------------------------------------------------
     inline void setFlag(FLAGS f, bool v);
     inline bool getFlag(FLAGS f) const;
     inline void setZN(uint8_t v);
@@ -93,9 +85,8 @@ private:
     void push(uint8_t v);
     uint8_t pop();
 
-    // -------------------------------------------------------------------------
+
     // Addressing modes
-    // -------------------------------------------------------------------------
     uint8_t IMP(); uint8_t IMM();
     uint8_t ZP0(); uint8_t ZPX(); uint8_t ZPY();
     uint8_t ABS(); uint8_t ABX(); uint8_t ABY();
@@ -103,9 +94,8 @@ private:
     uint8_t IZX(); uint8_t IZY();
     uint8_t REL();
 
-    // -------------------------------------------------------------------------
-    // Instructions (full 6502 set)
-    // -------------------------------------------------------------------------
+
+    // Instructions
     uint8_t BRK(); uint8_t ORA(); uint8_t ASL(); uint8_t PHP();
     uint8_t BPL(); uint8_t CLC();
     uint8_t JSR(); uint8_t AND(); uint8_t BIT(); uint8_t ROL(); uint8_t PLP();
@@ -125,9 +115,8 @@ private:
 
     uint8_t XXX();   // illegal/unused opcodes
 
-    // -------------------------------------------------------------------------
+
     // Lookup Table
-    // -------------------------------------------------------------------------
     struct Op {
         const char* name;
         uint8_t (cpu::*operate)();
