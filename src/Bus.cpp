@@ -38,6 +38,23 @@ uint8_t bus::read(uint16_t addr, bool readonly) {
     if (addr >= 0x2000 && addr <= 0x3FFF)
         return connectedPPU->cpuRead(addr & 0x0007, readonly);
 
+    if (addr == 0x4016 || addr == 0x4017) {
+        int idx = (addr == 0x4016) ? 0 : 1;
+
+        uint8_t data_out = 0x00;
+
+        // If strobe is high, keep returning current A button state (bit0)
+        if (controller_strobe & 0x01) {
+            data_out = controller[idx] & 0x01;
+        } else {
+            // Return lowest bit, then shift right
+            data_out = controller_state[idx] & 0x01;
+            controller_state[idx] >>= 1;
+        }
+
+        return data_out;
+    }
+
     return 0x00;
 }
 
@@ -50,6 +67,24 @@ void bus::write(uint16_t addr, uint8_t data) {
         dma_addr = 0x00;
         dma_dummy = true;
         dma_transfer = true;
+        return;
+    }
+
+    if (addr == 0x4016) {
+        // When strobe goes from 1 -> 0, latch controllers
+        if ((controller_strobe & 0x01) && ((data & 0x01) == 0)) {
+            controller_state[0] = controller[0];
+            controller_state[1] = controller[1];
+        }
+
+        controller_strobe = data & 0x01;
+
+        // If strobe is 1, continuously latch (common behavior)
+        if (controller_strobe & 0x01) {
+            controller_state[0] = controller[0];
+            controller_state[1] = controller[1];
+        }
+
         return;
     }
 
@@ -137,4 +172,9 @@ void bus::reset() {
     dma_data = 0x00;
 
     if (connectedCPU) connectedCPU->reset();
+}
+
+void bus::setControllerState(int idx, uint8_t state) {
+    if (idx < 0 || idx > 1) return;
+    controller[idx] = state;
 }

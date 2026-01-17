@@ -249,7 +249,7 @@ uint8_t cpu::TYA() { A = Y; setZN(A); return 0; }
 
 uint8_t cpu::TXS() { SP = X; return 0; }
 
-uint8_t cpu::TSX() { X = SP; return 0; }
+uint8_t cpu::TSX() { X = SP; setZN(X); return 0; }
 
 uint8_t cpu::INX() { X++; setZN(X); return 0; }
 uint8_t cpu::INY() { Y++; setZN(Y); return 0; }

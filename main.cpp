@@ -17,6 +17,28 @@
 
 
 
+static uint8_t BuildController1(GLFWwindow* window) {
+    uint8_t c = 0x00;
+
+    auto down = [&](int key) { return glfwGetKey(window, key) == GLFW_PRESS; };
+
+    // A (E), B (Q)
+    if (down(GLFW_KEY_E)) c |= (1 << 0); // A
+    if (down(GLFW_KEY_Q)) c |= (1 << 1); // B
+
+    // Optional: Select/Start
+    if (down(GLFW_KEY_RIGHT_SHIFT)) c |= (1 << 2); // Select
+    if (down(GLFW_KEY_ENTER))       c |= (1 << 3); // Start
+
+    // D-pad (WASD)
+    if (down(GLFW_KEY_W)) c |= (1 << 4); // Up
+    if (down(GLFW_KEY_S)) c |= (1 << 5); // Down
+    if (down(GLFW_KEY_A)) c |= (1 << 6); // Left
+    if (down(GLFW_KEY_D)) c |= (1 << 7); // Right
+
+    return c;
+}
+
 int main() {
     // -----------------------------
     // Initialize GLFW
@@ -105,7 +127,7 @@ int main() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
 
-    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/DigDug.nes");
+    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/Iceclimber.nes");
 
 
 
@@ -135,6 +157,8 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
 
         glfwPollEvents();
+        // Update controller state every frame
+        bus.setControllerState(0, BuildController1(window));
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -158,6 +182,7 @@ int main() {
                 ImGui::MenuItem("Pattern Tables", nullptr, &showPattern);
                 ImGui::EndMenu();
             }
+
             ImGui::EndMainMenuBar();
         }
 
