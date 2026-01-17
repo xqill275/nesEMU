@@ -83,7 +83,7 @@ int main() {
 
 
     // Load ROM
-    cartridge cart("");
+    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/nestest.nes");
     bus.insertCartridge(&cart);
     bus.reset();
 
