@@ -15,4 +15,9 @@
 | Ice Climber | NROM | Playable |  |
 | Donkey Kong | NROM | Playable |  |
 | Super Mario Bros. | NROM | Boots | Does not get past the main menu |
+| DigDug | NROM | Playable | |
+| ExciteBike | NROM | Boots | gets stuck when getting to the first level |
+| Galaga | NROM | Playable |  |
+| Popeye | NROM | Playable |  |
+
 *This list will be updated as development progresses.*
