@@ -32,6 +32,8 @@ set(IMGUI_SRC
         src/external/imgui/backends/imgui_impl_opengl3.cpp
         src/Mappers/Mapper000.h
         src/header/ppu.h
+        src/header/FileDialogs.h
+        src/header/GLTextures.h
 )
 
 add_library(imgui STATIC ${IMGUI_SRC})
@@ -58,6 +60,14 @@ set(SOURCES
         src/Mappers/Mapper000.cpp
         src/ppu.cpp
         src/header/KeyBinds.h
+        src/header/FileDialogs.h
+        src/FileDialogs.cpp
+        src/header/GLTextures.h
+        src/GLTextures.cpp
+        src/header/KeybindsUI.h
+        src/KeybindsUI.cpp
+        src/header/EmuApp.h
+        src/EmuApp.cpp
 )
 
 # Create executable (IMPORTANT!)
