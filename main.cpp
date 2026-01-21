@@ -1,9 +1,23 @@
 #include <iostream>
 #include <string>
 
+// win32
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
+#include <memory>
+#include <string>
+
 // GLAD
 #include "src/external/glad/include/glad/glad.h"
 #include <GLFW/glfw3.h>
+#ifdef _WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
 
 // Core emulator
 #include "src/header/cpu.h"
@@ -19,6 +33,35 @@
 #include "src/external/imgui/backends/imgui_impl_glfw.h"
 #include "src/external/imgui/backends/imgui_impl_opengl3.h"
 
+#ifdef _WIN32
+static std::string OpenRomDialogWindows(HWND owner)
+{
+    char fileName[MAX_PATH] = { 0 };
+
+    OPENFILENAMEA ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+
+    ofn.lStructSize  = sizeof(ofn);
+    ofn.hwndOwner    = owner;
+    ofn.lpstrFile    = fileName;
+    ofn.nMaxFile     = MAX_PATH;
+
+    // Filter string is pairs of "Label\0Pattern\0" and ends with \0\0
+    ofn.lpstrFilter  = "NES ROM (*.nes)\0*.nes\0All Files (*.*)\0*.*\0\0";
+
+    ofn.nFilterIndex = 1;
+    ofn.Flags        = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+
+    // Optional: set a default extension if user types without one
+    ofn.lpstrDefExt  = "nes";
+
+    if (GetOpenFileNameA(&ofn) == TRUE)
+        return std::string(fileName);
+
+    return {};
+}
+#endif
+
 static ImGuiKey CaptureAnyPressedKey() {
     for (ImGuiKey key = (ImGuiKey)ImGuiKey_NamedKey_BEGIN;
          key < (ImGuiKey)ImGuiKey_NamedKey_END;
@@ -33,6 +76,26 @@ static ImGuiKey CaptureAnyPressedKey() {
 static const char* KeyName(ImGuiKey k) {
     const char* n = ImGui::GetKeyName(k);
     return (n && n[0]) ? n : "None";
+}
+
+static bool LoadRomIntoEmu(
+    const std::string& path,
+    std::unique_ptr<cartridge>& cart,
+    bus& bus,
+    ppu& ppu
+) {
+    if (path.empty()) return false;
+
+    auto newCart = std::make_unique<cartridge>(path);
+    if (!newCart->valid) return false;
+
+    cart = std::move(newCart);
+    bus.insertCartridge(cart.get());
+
+    bus.reset();
+    ppu.frame_complete = false;
+
+    return true;
 }
 
 int main() {
@@ -83,9 +146,16 @@ int main() {
 
 
     // Load ROM
-    cartridge cart("C:/Users/olive/CLionProjects/untitled1/roms/donkeykong.nes");
-    bus.insertCartridge(&cart);
-    bus.reset();
+    std::unique_ptr<cartridge> cart;
+    std::string loadedRomPath = "";
+
+    cart = std::make_unique<cartridge>(loadedRomPath);
+    if (!cart->valid) {
+        std::cerr << "Default ROM failed to load: " << loadedRomPath << "\n";
+    } else {
+        bus.insertCartridge(cart.get());
+        bus.reset();
+    }
 
 
     // Keybinds load/save
@@ -175,7 +245,20 @@ int main() {
         if (ImGui::BeginMainMenuBar()) {
 
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Open ROM...")) {}
+                if (ImGui::MenuItem("Open ROM...")) {
+#ifdef _WIN32
+                    HWND hwnd = glfwGetWin32Window(window);
+                    std::string path = OpenRomDialogWindows(hwnd);
+                    if (!path.empty()) {
+                        if (LoadRomIntoEmu(path, cart, bus, ppu)) {
+                            loadedRomPath = path;
+                            running = false; // optional: pause after loading
+                        } else {
+                            MessageBoxA(hwnd, "Failed to load ROM.", "Error", MB_OK | MB_ICONERROR);
+                        }
+                    }
+#endif
+                }
                 if (ImGui::MenuItem("Reload ROM")) {}
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) {
