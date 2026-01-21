@@ -12,7 +12,7 @@
 
 | Game | Mapper | Status | Notes |
 |------|--------|--------|-------|
-| Ice Climber | NROM | Playable | Correct scrolling and sprites |
-| Donkey Kong | NROM | Playable | Known good reference title |
+| Ice Climber | NROM | Playable |  |
+| Donkey Kong | NROM | Playable |  |
 | Super Mario Bros. | NROM | Boots | Does not get past the main menu |
 *This list will be updated as development progresses.*
