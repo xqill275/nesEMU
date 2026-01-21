@@ -1,5 +1,7 @@
 ## Game Compatibility
 
+these are games i have personally tested
+
 **Current limitations**
 - Mapper 0 (NROM) only
 - No audio (APU not implemented)
