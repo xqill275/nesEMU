@@ -12,8 +12,8 @@ these are games i have personally tested
 - **Boots** – Reaches gameplay but is broken
 - **Does Not Boot** – Fails to start
 
-| Game | Mapper | Status | Notes |
-|------|--------|--------|-------|
+| Game | Mapper |Region | Status | Notes |
+|------|--------|--------|-------|-------|
 | Ice Climber | NROM | Playable |  |
 | Donkey Kong | NROM | Playable |  |
 | Super Mario Bros. | NROM | Boots | Does not get past the main menu |
