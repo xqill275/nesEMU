@@ -55,6 +55,7 @@ bool EmuApp::init()
     CPU.connectBus(&BUS);
     BUS.connectCpu(&CPU);
     BUS.connectPPU(&PPU);
+    BUS.connectAPU(&APU);
 
     // Keybinds
     binds = Keybinds::Defaults();
@@ -62,6 +63,10 @@ bool EmuApp::init()
         SaveKeybinds(binds, bindsPath);
     }
     KeybindsUI::Init(bindsPath);
+
+    if (!audio.init(&APU, 48000)) {
+        std::cerr << "Failed to init audio\n";
+    }
 
     // Textures
     textures.init();
@@ -76,6 +81,7 @@ bool EmuApp::init()
 void EmuApp::shutdown()
 {
     textures.shutdown();
+    audio.shutdown();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -198,6 +204,7 @@ void EmuApp::drawMenuBar()
         ImGui::MenuItem("PPU", nullptr, &showPPU);
         ImGui::MenuItem("VRAM", nullptr, &showVRAM);
         ImGui::MenuItem("Pattern Tables", nullptr, &showPattern);
+        ImGui::MenuItem("APU", nullptr, &showAPU);
         ImGui::EndMenu();
     }
 
@@ -327,6 +334,64 @@ void EmuApp::drawPanels()
     ImGui::Begin("NES Screen");
     ImGui::Image((void*)(intptr_t)textures.frameTex(), ImVec2(512, 480));
     ImGui::End();
+
+    // APU
+    if (showAPU) {
+        ImGui::Begin("APU");
+
+        // Read-only debug status (won't clear IRQ)
+        uint8_t status = APU.debugStatus4015();
+
+        ImGui::Text("Status ($4015 read): %02X", status);
+        ImGui::Separator();
+
+        ImGui::Text("Decoded $4015 status");
+        ImGui::BulletText("Pulse 1:   %s", (status & 0x01) ? "active" : "off");
+        ImGui::BulletText("Pulse 2:   %s", (status & 0x02) ? "active" : "off");
+        ImGui::BulletText("Triangle:  %s", (status & 0x04) ? "active" : "off");
+        ImGui::BulletText("Noise:     %s", (status & 0x08) ? "active" : "off");
+        ImGui::BulletText("DMC:       %s", (status & 0x10) ? "active" : "off");
+        ImGui::BulletText("Frame IRQ: %s", (status & 0x40) ? "ASSERTED" : "clear");
+
+        ImGui::Separator();
+
+        uint8_t reg4015 = APU.debugReg(0x4015);
+        uint8_t reg4017 = APU.debugReg(0x4017);
+
+        ImGui::Text("$4015 (Enable): %02X", reg4015);
+        ImGui::BulletText("Enable Pulse 1:  %s", (reg4015 & 0x01) ? "ON" : "OFF");
+        ImGui::BulletText("Enable Pulse 2:  %s", (reg4015 & 0x02) ? "ON" : "OFF");
+        ImGui::BulletText("Enable Triangle: %s", (reg4015 & 0x04) ? "ON" : "OFF");
+        ImGui::BulletText("Enable Noise:    %s", (reg4015 & 0x08) ? "ON" : "OFF");
+        ImGui::BulletText("Enable DMC:      %s", (reg4015 & 0x10) ? "ON" : "OFF");
+
+        ImGui::Separator();
+
+        ImGui::Text("$4017 (Frame Counter): %02X", reg4017);
+        ImGui::BulletText("Mode: %s", (reg4017 & 0x80) ? "5-step" : "4-step");
+        ImGui::BulletText("IRQ Inhibit: %s", (reg4017 & 0x40) ? "ON" : "OFF");
+
+        ImGui::Separator();
+        ImGui::Text("Raw register mirror ($4000-$4017)");
+
+        ImGui::BeginChild("APURegs", ImVec2(0, 220), true);
+        for (int base = 0x4000; base <= 0x4010; base += 0x10) {
+            ImGui::Text("%04X:", base);
+            ImGui::SameLine();
+            for (int i = 0; i < 16; i++) {
+                uint16_t a = (uint16_t)(base + i);
+                uint8_t v = APU.debugReg(a);
+                ImGui::SameLine();
+                ImGui::Text("%02X", v);
+            }
+        }
+        // final row: 4010..4017 (already printed 4010..401F above, but we only care to 4017)
+        // If you want a clean exact range, you can special-case it. This is fine for quick debug.
+        ImGui::EndChild();
+
+        ImGui::End();
+    }
+
 }
 
 int EmuApp::run()

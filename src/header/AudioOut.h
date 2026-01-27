@@ -1,16 +1,17 @@
-//
-// Created by olive on 27/01/2026.
-//
+// header/AudioOut.h
+#pragma once
+#include <cstdint>
 
-#ifndef AUDIOOUT_H
-#define AUDIOOUT_H
-
-
+class apu;
 
 class AudioOut {
+public:
+    bool init(apu* a, uint32_t sampleRate = 48000);
+    void shutdown();
 
+    apu* m_apu = nullptr;
+
+    // Opaque miniaudio types (defined in .cpp)
+    struct Impl;
+    Impl* impl = nullptr;
 };
-
-
-
-#endif //AUDIOOUT_H

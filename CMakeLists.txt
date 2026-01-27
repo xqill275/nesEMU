@@ -34,6 +34,8 @@ set(IMGUI_SRC
         src/header/ppu.h
         src/header/FileDialogs.h
         src/header/GLTextures.h
+        src/AudioOut.cpp
+        src/header/AudioOut.h
 )
 
 add_library(imgui STATIC ${IMGUI_SRC})
@@ -68,6 +70,11 @@ set(SOURCES
         src/KeybindsUI.cpp
         src/header/EmuApp.h
         src/EmuApp.cpp
+        src/header/apu.h
+        src/apu.cpp
+        src/external/miniaudio/miniaudio.h
+        src/AudioOut.cpp
+        src/header/AudioOut.h
 )
 
 # Create executable (IMPORTANT!)
