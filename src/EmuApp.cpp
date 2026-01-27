@@ -57,6 +57,12 @@ bool EmuApp::init()
     BUS.connectPPU(&PPU);
     BUS.connectAPU(&APU);
 
+    APU.setDmcReader([this](uint16_t a) -> uint8_t {
+    return BUS.read(a, true);
+    });
+
+
+
     // Keybinds
     binds = Keybinds::Defaults();
     if (!LoadKeybinds(binds, bindsPath)) {

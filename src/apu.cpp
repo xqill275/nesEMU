@@ -23,6 +23,10 @@ void apu::reset() {
 
     p1 = {};
     p2 = {};
+    tri = {};
+    noise = {};
+    noise.lfsr = 1;
+    dmc = {};
 
     m_audioWrite.store(0, std::memory_order_relaxed);
     m_audioRead.store(0, std::memory_order_relaxed);
@@ -38,6 +42,11 @@ uint8_t apu::debugStatus4015() const {
     uint8_t s = 0;
     if (p1.length_counter > 0) s |= (1 << 0);
     if (p2.length_counter > 0) s |= (1 << 1);
+    if (tri.length_counter > 0) s |= (1 << 2);
+    if (noise.length_counter > 0) s |= (1 << 3);
+    if (dmc.bytes_remaining > 0) s |= (1 << 4);
+
+    if (dmc.irq) s |= (1 << 7);
     // pulse2/tri/noise/dmc later
     if (frame_irq) s |= (1 << 6);
     return s;
@@ -50,6 +59,8 @@ uint8_t apu::cpuRead(uint16_t addr, bool readonly) {
         uint8_t s = 0;
         if (p1.length_counter > 0) s |= (1 << 0);
         if (p2.length_counter > 0) s |= (1 << 1);
+        if (tri.length_counter > 0) s |= (1 << 2);
+        if (noise.length_counter > 0) s |= (1 << 3);
         if (frame_irq) s |= (1 << 6);
 
         // Reading $4015 clears frame IRQ
@@ -107,9 +118,27 @@ void apu::cpuWrite(uint16_t addr, uint8_t data) {
     if (addr == 0x4015) {
         p1.enabled = (data & 0x01) != 0;
         p2.enabled = (data & 0x02) != 0;
+        tri.enabled = (data & 0x04) != 0;
+        noise.enabled = (data & 0x08) != 0;
+        dmc.enabled = (data & 0x10) != 0;
 
         if (!p1.enabled) p1.length_counter = 0;
         if (!p2.enabled) p2.length_counter = 0;
+        if (!tri.enabled) tri.length_counter = 0;
+        if (!noise.enabled) noise.length_counter = 0;
+
+        if (!dmc.enabled) {
+            dmc.bytes_remaining = 0;
+            dmc.sample_buffer_empty = true;
+            dmc.bits_remaining = 0;
+            dmc.irq = false;
+        } else {
+            // If enabling and nothing queued, start a new sample
+            if (dmc.bytes_remaining == 0) {
+                dmc.current_addr = 0xC000u + (uint16_t)dmc.sample_addr_reg * 64u;
+                dmc.bytes_remaining = (uint16_t)dmc.sample_len_reg * 16u + 1u;
+            }
+        }
 
         return;
     }
@@ -157,7 +186,93 @@ void apu::cpuWrite(uint16_t addr, uint8_t data) {
         p2.seq_step = 0;
         return;
     }
-    // $4004+ later for other channels
+
+    // -------- Triangle registers ($4008-$400B) --------
+    if (addr == 0x4008) {
+        tri.control_flag  = (data & 0x80) != 0;
+        tri.linear_reload = data & 0x7F;
+        return;
+    }
+
+    if (addr == 0x4009) {
+        // Unused on NES APU (still mirrored)
+        return;
+    }
+
+    if (addr == 0x400A) {
+        tri.timer = (tri.timer & 0xFF00) | data;
+        return;
+    }
+
+    if (addr == 0x400B) {
+        tri.timer = (tri.timer & 0x00FF) | ((uint16_t)(data & 0x07) << 8);
+
+        // Load length counter if enabled
+        uint8_t len_idx = (data >> 3) & 0x1F;
+        if (tri.enabled) {
+            tri.length_counter = lengthTable(len_idx);
+        }
+
+        // Writing $400B sets the linear reload flag
+        tri.linear_reload_flag = true;
+
+        return;
+    }
+
+
+    // -------- Noise registers ($400C-$400F) --------
+    if (addr == 0x400C) {
+        noise.length_halt      = (data & 0x20) != 0;
+        noise.constant_volume  = (data & 0x10) != 0;
+        noise.volume           = data & 0x0F;
+        noise.env_start        = true;
+        return;
+    }
+
+    if (addr == 0x400D) {
+        // unused on NES
+        return;
+    }
+
+    if (addr == 0x400E) {
+        noise.mode   = (data & 0x80) != 0;
+        noise.period = data & 0x0F;
+        return;
+    }
+
+    if (addr == 0x400F) {
+        uint8_t len_idx = (data >> 3) & 0x1F;
+        if (noise.enabled) {
+            noise.length_counter = lengthTable(len_idx);
+        }
+        noise.env_start = true;
+        return;
+    }
+
+    // -------- DMC registers ($4010-$4013) --------
+    if (addr == 0x4010) {
+        dmc.irq_enable = (data & 0x80) != 0;
+        dmc.loop       = (data & 0x40) != 0;
+        dmc.rate       = data & 0x0F;
+
+        if (!dmc.irq_enable) dmc.irq = false; // disabling IRQ clears it
+        return;
+    }
+
+    if (addr == 0x4011) {
+        dmc.output_level = data & 0x7F;
+        return;
+    }
+
+    if (addr == 0x4012) {
+        dmc.sample_addr_reg = data;
+        return;
+    }
+
+    if (addr == 0x4013) {
+        dmc.sample_len_reg = data;
+        return;
+    }
 }
 
 void apu::clockEnvelope(Pulse& p) {
@@ -193,11 +308,18 @@ void apu::clockLengthCounter(Pulse& p) {
 void apu::quarterFrame() {
     clockEnvelope(p1);
     clockEnvelope(p2);
+    clockLinearCounter(tri);
+    clockEnvelopeNoise(noise);
 }
 
 void apu::halfFrame() {
     clockLengthCounter(p1);
     clockLengthCounter(p2);
+    clockLengthCounterNoise(noise);
+
+    if (!tri.control_flag && tri.length_counter > 0) {
+        tri.length_counter--;
+    }
     // sweep later
 }
 
@@ -261,6 +383,7 @@ void apu::clock() {
 
     // Frame sequencer events
     clockFrameSequencer();
+    clockDMC();
 
     // Pulse timer/sequencer runs at CPU rate
     // On each CPU cycle, decrement timer counter; when hits 0, reload and advance sequence.
@@ -277,6 +400,36 @@ void apu::clock() {
     } else {
         p2.timer_counter--;
     }
+
+    if (tri.timer_counter == 0) {
+        tri.timer_counter = tri.timer;
+
+        // Triangle advances only when it is “audible” (linear + length nonzero)
+        if (tri.length_counter > 0 && tri.linear_counter > 0) {
+            tri.seq_step = (tri.seq_step + 1) & 31;
+        }
+    } else {
+        tri.timer_counter--;
+    }
+
+    // Noise timer/LFSR
+    if (noise.timer_counter == 0) {
+        noise.timer_counter = noisePeriodTable(noise.period);
+
+        // Update LFSR if channel is potentially active
+        if (noise.enabled && noise.length_counter > 0) {
+            // feedback bit uses bit0 XOR bit1 (mode=0) or bit0 XOR bit6 (mode=1)
+            uint16_t bit0 = noise.lfsr & 0x0001;
+            uint16_t tap  = noise.mode ? ((noise.lfsr >> 6) & 0x0001)
+                                       : ((noise.lfsr >> 1) & 0x0001);
+            uint16_t feedback = bit0 ^ tap;
+
+            noise.lfsr >>= 1;
+            noise.lfsr |= (feedback << 14); // keep 15-bit register
+        }
+    } else {
+        noise.timer_counter--;
+    }
     // ---- audio sample generation ----
     // We are clocked at CPU rate. Convert CPU cycles -> audio samples.
     m_samplePhase += (double)m_sampleRate / CPU_HZ;
@@ -288,22 +441,28 @@ void apu::clock() {
 }
 
 float apu::sample() const {
-    // Right now: Pulse 1 only.
-    // Use NES’s nonlinear mixer for pulse channels (even if only one is used).
-    //
-    // pulse_out = 95.88 / (8128/(p1+p2) + 100)
-    // If p1+p2 == 0 -> 0
+    // ----- Pulse mixer -----
     uint8_t p1o = pulseOutput(p1);
     uint8_t p2o = pulseOutput(p2);
-
-
     int pulseSum = (int)p1o + (int)p2o;
-    if (pulseSum == 0) return 0.0f;
 
-    float out = 95.88f / ((8128.0f / (float)pulseSum) + 100.0f);
+    float pulseOut = 0.0f;
+    if (pulseSum != 0) {
+        pulseOut = 95.88f / ((8128.0f / (float)pulseSum) + 100.0f);
+    }
 
-    // Keep in [-1,1] style range; this is already 0..~0.3
-    return out;
+    // ----- TND mixer -----
+    float t = (float)triangleOutput(tri);      // 0..15
+    float n = (float)noiseOutput(noise);       // 0..15
+    float d = (float)dmcOutput(); // 0..127
+
+    float tndOut = 0.0f;
+    float denom = (t / 8227.0f) + (n / 12241.0f) + (d / 22638.0f);
+    if (denom > 0.0f) {
+        tndOut = 159.79f / ((1.0f / denom) + 100.0f);
+    }
+
+    return pulseOut + tndOut;
 }
 
 
@@ -350,3 +509,166 @@ uint32_t apu::popSamples(float* out, uint32_t frames) {
     m_audioRead.store(r + toRead, std::memory_order_release);
     return toRead;
 }
+
+void apu::clockLinearCounter(Triangle& t) {
+    if (t.linear_reload_flag) {
+        t.linear_counter = t.linear_reload;
+    } else if (t.linear_counter > 0) {
+        t.linear_counter--;
+    }
+
+    // If control_flag is clear, reload flag is cleared after the clock
+    if (!t.control_flag) {
+        t.linear_reload_flag = false;
+    }
+}
+
+uint8_t apu::triangleOutput(const Triangle& t) const {
+    if (!t.enabled) return 0;
+    if (t.length_counter == 0) return 0;
+    if (t.linear_counter == 0) return 0;
+
+    // Very small timer values produce ultrasonic / invalid output; commonly muted
+    if (t.timer < 2) return 0;
+
+    // 32-step triangle sequence (0..15..0..15..)
+    static constexpr uint8_t seq[32] = {
+        15,14,13,12,11,10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+         0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15
+    };
+
+    return seq[t.seq_step & 31];
+}
+
+void apu::clockEnvelopeNoise(Noise& n) {
+    if (n.env_start) {
+        n.env_start  = false;
+        n.env_decay  = 15;
+        n.env_divider = n.volume;
+    } else {
+        if (n.env_divider == 0) {
+            n.env_divider = n.volume;
+
+            if (n.env_decay == 0) {
+                if (n.length_halt) {
+                    n.env_decay = 15; // loop
+                }
+            } else {
+                n.env_decay--;
+            }
+        } else {
+            n.env_divider--;
+        }
+    }
+}
+
+void apu::clockLengthCounterNoise(Noise& n) {
+    if (!n.length_halt && n.length_counter > 0) {
+        n.length_counter--;
+    }
+}
+
+uint16_t apu::noisePeriodTable(uint8_t idx) {
+    // NTSC noise periods (CPU cycles per LFSR shift)
+    // Common table used by most emulators.
+    static constexpr uint16_t t[16] = {
+        4, 8, 16, 32, 64, 96, 128, 160,
+        202, 254, 380, 508, 762, 1016, 2034, 4068
+    };
+    return t[idx & 0x0F];
+}
+
+uint8_t apu::noiseOutput(const Noise& n) const {
+    if (!n.enabled) return 0;
+    if (n.length_counter == 0) return 0;
+
+    // If LFSR bit0 is 1, output is forced to 0 (silence) on NES noise
+    if (n.lfsr & 0x0001) return 0;
+
+    uint8_t env = n.constant_volume ? n.volume : n.env_decay;
+    return env & 0x0F;
+}
+
+uint16_t apu::dmcRateTable(uint8_t idx) {
+    // NTSC DMC rates (in CPU cycles per bit)
+    static constexpr uint16_t t[16] = {
+        428, 380, 340, 320, 286, 254, 226, 214,
+        190, 160, 142, 128, 106,  85,  72,  54
+    };
+    return t[idx & 0x0F];
+}
+
+void apu::refillDmcSampleBuffer() {
+    if (!dmc.enabled) return;
+    if (!dmc.sample_buffer_empty) return;
+    if (dmc.bytes_remaining == 0) return;
+
+    if (!m_dmcRead) {
+        // no bus hook yet; stay silent
+        return;
+    }
+
+    // Fetch one byte from CPU memory
+    dmc.sample_buffer = m_dmcRead(dmc.current_addr);
+    dmc.sample_buffer_empty = false;
+
+    // Increment address (wrap at 0xFFFF -> 0x8000)
+    dmc.current_addr++;
+    if (dmc.current_addr == 0x0000) dmc.current_addr = 0x8000;
+
+    // Decrement remaining
+    dmc.bytes_remaining--;
+
+    // End of sample handling
+    if (dmc.bytes_remaining == 0) {
+        if (dmc.loop) {
+            dmc.current_addr = 0xC000u + (uint16_t)dmc.sample_addr_reg * 64u;
+            dmc.bytes_remaining = (uint16_t)dmc.sample_len_reg * 16u + 1u;
+        } else if (dmc.irq_enable) {
+            dmc.irq = true;
+        }
+    }
+}
+
+void apu::clockDMC() {
+    // Refill sample buffer ASAP when empty and data remains
+    if (dmc.sample_buffer_empty) {
+        refillDmcSampleBuffer();
+    }
+
+    if (dmc.timer_counter == 0) {
+        dmc.timer_counter = dmcRateTable(dmc.rate);
+
+        // If we have no bits loaded, try to load them from sample buffer
+        if (dmc.bits_remaining == 0) {
+            if (!dmc.sample_buffer_empty) {
+                dmc.shift_reg = dmc.sample_buffer;
+                dmc.sample_buffer_empty = true;
+                dmc.bits_remaining = 8;
+            } else {
+                // No data, output holds steady
+                return;
+            }
+        }
+
+        // Output unit: process 1 bit
+        uint8_t bit = dmc.shift_reg & 0x01;
+        dmc.shift_reg >>= 1;
+        dmc.bits_remaining--;
+
+        if (bit) {
+            if (dmc.output_level <= 125) dmc.output_level += 2;
+        } else {
+            if (dmc.output_level >= 2) dmc.output_level -= 2;
+        }
+
+    } else {
+        dmc.timer_counter--;
+    }
+}
+
+uint8_t apu::dmcOutput() const {
+    // DMC output is the DAC level 0..127
+    return dmc.output_level & 0x7F;
+}
+
