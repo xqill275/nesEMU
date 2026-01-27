@@ -4,6 +4,7 @@
 #include <cmath>
 #include <atomic>
 #include <array>
+#include <functional>
 
 class apu {
 public:
@@ -31,6 +32,8 @@ public:
 
     // Called from audio thread (miniaudio callback)
     uint32_t popSamples(float* out, uint32_t frames);
+
+    void setDmcReader(std::function<uint8_t(uint16_t)> fn) { m_dmcRead = std::move(fn); }
 
 private:
     // iNES / NES APU base clock (NTSC)
@@ -75,6 +78,89 @@ private:
         // For now we ignore sweep ($4001) (add later)
     } p1, p2;
 
+    // -------- Triangle channel --------
+    struct Triangle {
+        bool enabled = false;
+
+        // $4008
+        bool    control_flag = false;   // also length counter halt
+        uint8_t linear_reload = 0;      // 0..127
+
+        // Linear counter
+        uint8_t linear_counter = 0;
+        bool    linear_reload_flag = false;
+
+        // Timer ($400A/$400B)
+        uint16_t timer = 0;             // 11-bit
+        uint16_t timer_counter = 0;
+
+        // Sequencer (32-step)
+        uint8_t seq_step = 0;           // 0..31
+
+        // Length counter
+        uint8_t length_counter = 0;
+    } tri;
+
+    // -------- Noise channel --------
+    struct Noise {
+        bool enabled = false;
+
+        // $400C
+        bool    length_halt = false;     // also envelope loop
+        bool    constant_volume = false;
+        uint8_t volume = 0;              // 0..15
+
+        // Envelope
+        uint8_t env_divider = 0;
+        uint8_t env_decay = 0;
+        bool    env_start = false;
+
+        // $400E
+        bool    mode = false;            // 0=long (bit1), 1=short (bit6)
+        uint8_t period = 0;              // 0..15
+
+        // Timer
+        uint16_t timer_counter = 0;
+
+        // LFSR (15-bit). Bit0 is output (0 = audible, 1 = silent on real hw mixing logic)
+        uint16_t lfsr = 1;
+
+        // $400F length load
+        uint8_t length_counter = 0;
+    } noise;
+
+    // -------- DMC channel --------
+    struct DMC {
+        bool enabled = false;
+
+        // $4010
+        bool irq_enable = false;
+        bool loop = false;
+        uint8_t rate = 0;           // 0..15
+
+        // $4011
+        uint8_t output_level = 0;   // 0..127 (DAC)
+
+        // $4012/$4013
+        uint8_t sample_addr_reg = 0;   // base address = 0xC000 + (reg * 64)
+        uint8_t sample_len_reg  = 0;   // length = (reg * 16) + 1 bytes
+
+        // Playback state
+        uint16_t current_addr = 0;
+        uint16_t bytes_remaining = 0;
+
+        uint8_t  shift_reg = 0;
+        uint8_t  bits_remaining = 0; // 0..8
+
+        uint8_t  sample_buffer = 0;
+        bool     sample_buffer_empty = true;
+
+        uint16_t timer_counter = 0;
+
+        bool irq = false;
+    } dmc;
+
+
     // --- Audio output buffer (SPSC ring buffer) ---
     static constexpr uint32_t AUDIO_RING_SIZE = 1u << 15; // 32768 samples
     static constexpr uint32_t AUDIO_RING_MASK = AUDIO_RING_SIZE - 1;
@@ -90,6 +176,7 @@ private:
     uint32_t availableSamples() const;
 
 private:
+    std::function<uint8_t(uint16_t)> m_dmcRead;
     inline uint8_t& R(uint16_t addr) { return reg[addr - 0x4000]; }
     inline uint8_t  R(uint16_t addr) const { return reg[addr - 0x4000]; }
 
@@ -100,7 +187,21 @@ private:
     void clockEnvelope(Pulse& p);
     void clockLengthCounter(Pulse& p);
 
+    void clockEnvelopeNoise(Noise& n);
+    void clockLengthCounterNoise(Noise& n);
+
+    void clockLinearCounter(Triangle& t);
+    uint8_t triangleOutput(const Triangle& t) const;
+
+    uint8_t noiseOutput(const Noise& n) const;
+    static uint16_t noisePeriodTable(uint8_t idx);
+
     uint8_t pulseOutput(const Pulse& p) const;
 
     static uint8_t lengthTable(uint8_t idx);
+
+    static uint16_t dmcRateTable(uint8_t idx);
+    void clockDMC();
+    uint8_t dmcOutput() const;
+    void refillDmcSampleBuffer();
 };
