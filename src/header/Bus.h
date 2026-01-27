@@ -6,7 +6,9 @@
 
 class cpu;
 class ppu;
+class apu;
 class cartridge;
+
 
 class bus {
 public:
@@ -16,6 +18,7 @@ public:
     // Devices
     cpu* connectedCPU = nullptr;
     ppu* connectedPPU = nullptr;
+    apu* connectedAPU = nullptr;
     cartridge* cart   = nullptr;
 
     // 2KB internal RAM ($0000-$07FF, mirrored)
@@ -29,6 +32,7 @@ public:
     // Connections
     void connectCpu(cpu* cpu);
     void connectPPU(ppu* ppu);
+    void connectAPU(apu* apu);
     void insertCartridge(cartridge* cart);
 
     void setControllerState(int idx, uint8_t state);

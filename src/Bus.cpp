@@ -1,6 +1,7 @@
 #include "header/Bus.h"
 #include "header/cpu.h"
 #include "header/ppu.h"
+#include "header/apu.h"
 #include "header/cartridge.h"
 
 bus::bus() {
@@ -16,6 +17,11 @@ void bus::connectCpu(cpu* cpu) {
 void bus::connectPPU(ppu* ppu) {
     connectedPPU = ppu;
 }
+
+void bus::connectAPU(apu *apu) {
+    connectedAPU = apu;
+}
+
 
 void bus::insertCartridge(cartridge* cart) {
     this->cart = cart;
@@ -37,6 +43,10 @@ uint8_t bus::read(uint16_t addr, bool readonly) {
     // PPU registers ($2000-$3FFF mirrored every 8 bytes)
     if (addr >= 0x2000 && addr <= 0x3FFF)
         return connectedPPU->cpuRead(addr & 0x0007, readonly);
+
+    if (addr == 0x4015) {
+         return connectedAPU->cpuRead(addr, readonly);
+    }
 
     if (addr == 0x4016 || addr == 0x4017) {
         int idx = (addr == 0x4016) ? 0 : 1;
@@ -68,6 +78,19 @@ void bus::write(uint16_t addr, uint8_t data) {
         dma_dummy = true;
         dma_transfer = true;
         return;
+    }
+
+    if (addr >= 0x4000 && addr <= 0x4017) {
+        // $4014 handled earlier (DMA)
+        // $4016 handled earlier (controllers)
+        if (connectedAPU && addr != 0x4014 && addr != 0x4016 && addr != 0x4017) {
+            // Note: we DO want $4017 to go to APU too, so don't exclude it here
+        }
+
+        if (connectedAPU && addr != 0x4014 && addr != 0x4016) {
+            connectedAPU->cpuWrite(addr, data);
+            return;
+        }
     }
 
     if (addr == 0x4016) {
@@ -148,6 +171,7 @@ void bus::clock() {
         // CPU runs every 3rd PPU clock
         if (systemClockCounter % 3 == 0) {
             connectedCPU->clock();
+            connectedAPU->clock();
         }
     }
 
@@ -171,6 +195,7 @@ void bus::reset() {
     dma_data = 0x00;
 
     if (connectedCPU) connectedCPU->reset();
+    if (connectedAPU) connectedAPU->reset();
 }
 
 void bus::setControllerState(int idx, uint8_t state) {

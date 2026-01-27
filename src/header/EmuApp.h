@@ -7,9 +7,11 @@ struct GLFWwindow;
 #include "cpu.h"
 #include "Bus.h"
 #include "ppu.h"
+#include "apu.h"
 #include "cartridge.h"
 #include "Keybinds.h"
 #include "GLTextures.h"
+#include "AudioOut.h"
 
 class EmuApp {
 public:
@@ -34,6 +36,9 @@ private:
     cpu CPU;
     ppu PPU;
     bus BUS;
+    apu APU;
+
+    AudioOut audio;
 
     std::unique_ptr<cartridge> CART;
     std::string loadedRomPath;
@@ -53,6 +58,7 @@ private:
     bool showPPU = true;
     bool showVRAM = false;
     bool showPattern = true;
+    bool showAPU = false;
 
     // timing
     double lastTime = 0.0;
