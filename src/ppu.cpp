@@ -34,6 +34,103 @@ void ppu::connectCartridge(cartridge* c) {
     cart = c;
 }
 
+static inline uint8_t getBit(uint8_t v, int bit) { return (v >> bit) & 1; }
+
+// returns true if BG pixel at (x,y) is non-zero (i.e., not color 0)
+// This uses the same *frame-style* background fetch you already do in renderBackground().
+bool ppu::bgPixelNonZeroAt(int x, int y)
+{
+    if (!(PPUMASK & 0x08)) return false;
+
+    // Use scroll values from tram_addr (what your renderer uses)
+    int scrollX = (int)tram_addr.coarse_x * 8 + (int)fine_x;
+    int scrollY = (int)tram_addr.coarse_y * 8 + (int)tram_addr.fine_y;
+
+    int baseNTX = tram_addr.nametable_x ? 1 : 0;
+    int baseNTY = tram_addr.nametable_y ? 1 : 0;
+
+    int worldX = x + scrollX + baseNTX * 256;
+    int worldY = y + scrollY + baseNTY * 240;
+
+    int ntX = (worldX / 256) & 1;
+    int ntY = (worldY / 240) & 1;
+
+    int localX = worldX % 256;
+    int localY = worldY % 240;
+
+    int tileX = localX / 8;
+    int tileY = localY / 8;
+    int fineY = localY & 7;
+    int fineX = localX & 7;
+
+    int ntIndex = ntY * 2 + ntX;
+    uint16_t nametableBase = 0x2000 + (uint16_t)ntIndex * 0x0400;
+
+    uint8_t tileIndex = ppuRead(nametableBase + (uint16_t)tileY * 32 + (uint16_t)tileX);
+
+    uint16_t patternBase = (PPUCTRL & 0x10) ? 0x1000 : 0x0000;
+    uint16_t patternAddr = patternBase + (uint16_t)tileIndex * 16 + (uint16_t)fineY;
+
+    uint8_t plane0 = ppuRead(patternAddr);
+    uint8_t plane1 = ppuRead(patternAddr + 8);
+
+    int bit = 7 - fineX;
+    uint8_t px = (getBit(plane1, bit) << 1) | getBit(plane0, bit);
+
+    return px != 0;
+}
+
+// returns true if sprite0 pixel at (x,y) is non-zero
+bool ppu::sprite0PixelNonZeroAt(int x, int y)
+{
+    if (!(PPUMASK & 0x10)) return false;
+
+    // Sprite 0
+    uint8_t spriteY   = OAM[0];
+    uint8_t tileIndex = OAM[1];
+    uint8_t attr      = OAM[2];
+    uint8_t spriteX   = OAM[3];
+
+    bool flipH = (attr & 0x40) != 0;
+    bool flipV = (attr & 0x80) != 0;
+
+    bool sprite8x16 = (PPUCTRL & 0x20) != 0;
+    int spriteHeight = sprite8x16 ? 16 : 8;
+
+    int baseY = (int)spriteY + 1; // NES quirk
+
+    if (x < spriteX || x >= spriteX + 8) return false;
+    if (y < baseY   || y >= baseY + spriteHeight) return false;
+
+    int row = y - baseY;
+    int col = x - spriteX;
+
+    int srcRow = flipV ? (spriteHeight - 1 - row) : row;
+    int srcCol = flipH ? col : (7 - col);
+
+    uint16_t tileAddr = 0;
+
+    if (!sprite8x16) {
+        uint16_t patternBase8x8 = (PPUCTRL & 0x08) ? 0x1000 : 0x0000;
+        tileAddr = patternBase8x8 + (uint16_t)tileIndex * 16;
+    } else {
+        uint16_t bank = (tileIndex & 0x01) ? 0x1000 : 0x0000;
+        uint8_t topTile = tileIndex & 0xFE;
+        uint8_t useTile = (srcRow < 8) ? topTile : (uint8_t)(topTile + 1);
+        uint8_t rowInTile = (uint8_t)(srcRow & 7);
+
+        tileAddr = bank + (uint16_t)useTile * 16;
+        srcRow = rowInTile;
+    }
+
+    uint8_t plane0 = ppuRead(tileAddr + (uint16_t)srcRow);
+    uint8_t plane1 = ppuRead(tileAddr + (uint16_t)srcRow + 8);
+
+    uint8_t px = (getBit(plane1, srcCol) << 1) | getBit(plane0, srcCol);
+    return px != 0;
+}
+
+
 
 // Mirroring helper: map $2000-$2FFF into vram[0..0x07FF]
 uint16_t ppu::mapNametableAddr(uint16_t addr) const {
@@ -80,15 +177,13 @@ uint8_t ppu::cpuRead(uint16_t addr, bool readonly) {
     addr &= 0x0007;
 
     switch (addr) {
-        case 0x0002: { // PPUSTATUS
-            // top 3 bits from status, low 5 bits from read buffer
+        case 0x0002: {
             data = (PPUSTATUS & 0xE0) | (data_buffer & 0x1F);
 
-            // clear VBlank on read
-            PPUSTATUS &= ~0x80;
-
-            // reset latch for $2005/$2006
-            addr_latch = 0;
+            if (!readonly) {
+                PPUSTATUS &= ~0x80; // clear vblank only on real CPU reads
+                addr_latch = 0;
+            }
         } break;
 
         case 0x0004: { // OAMDATA
@@ -182,34 +277,75 @@ void ppu::cpuWrite(uint16_t addr, uint8_t data) {
 
 
 // PPU timing
-void ppu::clock() {
+void ppu::clock()
+{
+    // Advance
     cycle++;
 
+    // VBlank set/clear happen at cycle 1 on their scanlines
+    if (scanline == 241 && cycle == 1) {
+        PPUSTATUS |= 0x80;                 // set VBlank
+        if (PPUCTRL & 0x80) nmi = true;    // NMI enabled -> pulse nmi line
+    }
+
+    if (scanline == 261 && cycle == 1) {
+        PPUSTATUS &= ~0xE0; // clear VBlank(7), Sprite0Hit(6), Overflow(5)
+        nmi = false;
+    }
+
+    // Wrap cycle
     if (cycle >= 341) {
         cycle = 0;
         scanline++;
 
-        // start of vblank
-        if (scanline == 241) {
-            PPUSTATUS |= 0x80;
-            if (PPUCTRL & 0x80)
-                nmi = true;
-        }
-
-        // pre-render scanline
-        if (scanline == 261) {
-            // Clear vblank, sprite 0 hit, sprite overflow
-            PPUSTATUS &= ~0xE0; // clears bits 5,6,7
-            nmi = false;
-        }
-
-        // end of frame
+        // End of frame
         if (scanline >= 262) {
             scanline = 0;
             frame_complete = true;
         }
     }
+
+    // Visible area sprite0 hit test (very important for SMB-style split)
+    if (scanline >= 0 && scanline < 240 && cycle >= 1 && cycle <= 256)
+    {
+        bool bg_enabled  = (PPUMASK & 0x08) != 0;
+        bool spr_enabled = (PPUMASK & 0x10) != 0;
+
+        if (bg_enabled && spr_enabled)
+        {
+            int x = cycle - 1;
+            int y = scanline;
+
+            bool in_left8 = (x < 8);
+            bool bg_left8  = (PPUMASK & 0x02) != 0;
+            bool spr_left8 = (PPUMASK & 0x04) != 0;
+
+            // left-8 masking rules
+            if (!in_left8 || (bg_left8 && spr_left8))
+            {
+                if (!(PPUSTATUS & 0x40)) // not already set
+                {
+                    if (bgPixelNonZeroAt(x, y) && sprite0PixelNonZeroAt(x, y))
+                    {
+                        // common quirk: don't set at x==255
+                        if (x != 255) PPUSTATUS |= 0x40;
+                    }
+                }
+            }
+        }
+    }
+
+    if (scanline >= 0 && scanline < 240 && cycle == 0) {
+        // Use what CPU last wrote ($2005/$2006) which updates tram_addr + fine_x in your implementation
+        dbg_scrollX[scanline] = (int)tram_addr.coarse_x * 8 + (int)fine_x;
+        dbg_scrollY[scanline] = (int)tram_addr.coarse_y * 8 + (int)tram_addr.fine_y;
+
+        dbg_baseNTX[scanline] = tram_addr.nametable_x ? 1 : 0;
+        dbg_baseNTY[scanline] = tram_addr.nametable_y ? 1 : 0;
+    }
+
 }
+
 
 
 // PPU memory map
@@ -320,23 +456,18 @@ void ppu::renderBackground() {
     if (!(PPUMASK & 0x08))
         return;
 
-    // scroll values from tram_addr (what CPU last wrote via $2005/$2006)
-    int scrollX = (int)tram_addr.coarse_x * 8 + (int)fine_x;
-    int scrollY = (int)tram_addr.coarse_y * 8 + (int)tram_addr.fine_y;
-
-    // base nametable selection from tram_addr
-    int baseNTX = tram_addr.nametable_x ? 1 : 0;
-    int baseNTY = tram_addr.nametable_y ? 1 : 0;
-
     uint16_t patternBase = (PPUCTRL & 0x10) ? 0x1000 : 0x0000;
 
-    // Render each pixel as a window into the 2x2 nametable space
     for (int y = 0; y < 240; y++) {
-        int worldY = y + scrollY;
 
-        // include base nametable selection vertically (adds 240)
-        worldY += baseNTY * 240;
+        // --- per-scanline scroll (fixes SMB split scrolling) ---
+        int scrollX = dbg_scrollX[y];
+        int scrollY = dbg_scrollY[y];
+        int baseNTX = dbg_baseNTX[y];
+        int baseNTY = dbg_baseNTY[y];
+        // ------------------------------------------------------
 
+        int worldY = y + scrollY + baseNTY * 240;
         int ntY = (worldY / 240) & 1;
         int localY = worldY % 240;
 
@@ -344,10 +475,7 @@ void ppu::renderBackground() {
         int fine_y = localY & 7;
 
         for (int x = 0; x < 256; x++) {
-            int worldX = x + scrollX;
-
-            // include base nametable selection horizontally (adds 256)
-            worldX += baseNTX * 256;
+            int worldX = x + scrollX + baseNTX * 256;
 
             int ntX = (worldX / 256) & 1;
             int localX = worldX % 256;
@@ -358,11 +486,9 @@ void ppu::renderBackground() {
             int ntIndex = ntY * 2 + ntX; // 0..3
             uint16_t nametableBase = 0x2000 + (uint16_t)ntIndex * 0x0400;
 
-            // tile id
             uint16_t ntTileAddr = nametableBase + (uint16_t)tileY * 32 + (uint16_t)tileX;
             uint8_t tileIndex = ppuRead(ntTileAddr);
 
-            // attribute
             uint16_t attrAddr = nametableBase + 0x03C0
                               + (uint16_t)(tileY / 4) * 8
                               + (uint16_t)(tileX / 4);
@@ -372,7 +498,6 @@ void ppu::renderBackground() {
             int shift = ((tileY & 2) << 1) | (tileX & 2);
             uint8_t palSelect = (attrByte >> shift) & 0x03;
 
-            // pattern fetch
             uint16_t patternAddr = patternBase + (uint16_t)tileIndex * 16 + (uint16_t)fine_y;
             uint8_t plane0 = ppuRead(patternAddr);
             uint8_t plane1 = ppuRead(patternAddr + 8);
@@ -396,41 +521,47 @@ void ppu::renderBackground() {
 
 
 // Sprite renderer (supports 8x8 and 8x16)
-void ppu::renderSprites() {
+void ppu::renderSprites()
+{
+    // Sprites disabled?
     if (!(PPUMASK & 0x10))
         return;
 
     // Sprite 0 hit only makes sense if BG is enabled too
-    bool bg_enabled     = (PPUMASK & 0x08) != 0;
-    bool spr_enabled    = (PPUMASK & 0x10) != 0;
-    bool bg_left8       = (PPUMASK & 0x02) != 0; // show background in leftmost 8 pixels
-    bool spr_left8      = (PPUMASK & 0x04) != 0; // show sprites in leftmost 8 pixels
+    const bool bg_enabled  = (PPUMASK & 0x08) != 0;
+    const bool spr_enabled = (PPUMASK & 0x10) != 0;
 
-    bool sprite8x16 = (PPUCTRL & 0x20) != 0;
+    // Leftmost-8 masking rules
+    const bool bg_left8  = (PPUMASK & 0x02) != 0; // background in leftmost 8 pixels
+    const bool spr_left8 = (PPUMASK & 0x04) != 0; // sprites in leftmost 8 pixels
 
-    // Universal background color (your BG renderer uses this for pixel==0)
-    uint32_t bgColor = nes_colors[ppuRead(0x3F00) & 0x3F];
+    const bool sprite8x16 = (PPUCTRL & 0x20) != 0;
 
+    // Universal background color (used as "BG color 0" in your renderer)
+    const uint32_t bgColor = nes_colors[ppuRead(0x3F00) & 0x3F];
+
+    // Pattern table selection for 8x8 sprites
+    const uint16_t patternBase8x8 = (PPUCTRL & 0x08) ? 0x1000 : 0x0000;
+
+    // Draw sprites in OAM order (0..63). Real PPU priority is a bit more nuanced,
+    // but this is fine for your current renderer.
     for (int i = 0; i < 64; i++) {
-        int o = i * 4;
+        const int o = i * 4;
 
-        uint8_t spriteY   = OAM[o + 0];
-        uint8_t tileIndex = OAM[o + 1];
-        uint8_t attr      = OAM[o + 2];
-        uint8_t spriteX   = OAM[o + 3];
+        const uint8_t spriteY   = OAM[o + 0];
+        const uint8_t tileIndex = OAM[o + 1];
+        const uint8_t attr      = OAM[o + 2];
+        const uint8_t spriteX   = OAM[o + 3];
 
-        bool flipH    = (attr & 0x40) != 0;
-        bool flipV    = (attr & 0x80) != 0;
-        bool behindBG = (attr & 0x20) != 0;
+        const bool flipH    = (attr & 0x40) != 0;
+        const bool flipV    = (attr & 0x80) != 0;
+        const bool behindBG = (attr & 0x20) != 0;
 
-        uint8_t palSel = attr & 0x03;
+        const uint8_t palSel = (attr & 0x03);
 
-        // NES sprite Y is top-1
-        int baseY = (int)spriteY + 1;
-        int spriteHeight = sprite8x16 ? 16 : 8;
-
-        // 8x8 pattern table select
-        uint16_t patternBase8x8 = (PPUCTRL & 0x08) ? 0x1000 : 0x0000;
+        // NES OAM Y is "top - 1"
+        const int baseY = (int)spriteY + 1;
+        const int spriteHeight = sprite8x16 ? 16 : 8;
 
         for (int row = 0; row < spriteHeight; row++) {
             int srcRow = flipV ? (spriteHeight - 1 - row) : row;
@@ -438,74 +569,80 @@ void ppu::renderSprites() {
             uint16_t tileAddr = 0x0000;
 
             if (!sprite8x16) {
+                // 8x8: table from PPUCTRL bit 3
                 tileAddr = patternBase8x8 + (uint16_t)tileIndex * 16;
             } else {
-                // 8x16: bank selected by tileIndex bit0
-                uint16_t bank = (tileIndex & 0x01) ? 0x1000 : 0x0000;
+                // 8x16:
+                // bank selected by tileIndex bit0
+                const uint16_t bank = (tileIndex & 0x01) ? 0x1000 : 0x0000;
 
                 // tileIndex selects two stacked tiles (even=top, odd=bottom)
-                uint8_t topTile = tileIndex & 0xFE;
-                uint8_t useTile = (srcRow < 8) ? topTile : (uint8_t)(topTile + 1);
+                const uint8_t topTile = tileIndex & 0xFE;
+                const uint8_t useTile = (srcRow < 8) ? topTile : (uint8_t)(topTile + 1);
 
-                uint8_t rowInTile = (uint8_t)(srcRow & 0x07);
+                // row within that 8x8 tile
+                const uint8_t rowInTile = (uint8_t)(srcRow & 0x07);
 
                 tileAddr = bank + (uint16_t)useTile * 16;
                 srcRow = rowInTile;
             }
 
-            uint8_t plane0 = ppuRead(tileAddr + (uint16_t)srcRow);
-            uint8_t plane1 = ppuRead(tileAddr + (uint16_t)srcRow + 8);
+            // Fetch planes for this row
+            const uint8_t plane0 = ppuRead(tileAddr + (uint16_t)srcRow);
+            const uint8_t plane1 = ppuRead(tileAddr + (uint16_t)srcRow + 8);
 
             for (int col = 0; col < 8; col++) {
-                int srcCol = flipH ? col : (7 - col);
+                // Choose which bit to read for horizontal flip
+                const int bitIndex = flipH ? col : (7 - col);
 
-                uint8_t bit0  = (plane0 >> srcCol) & 1;
-                uint8_t bit1  = (plane1 >> srcCol) & 1;
-                uint8_t pixel = (bit1 << 1) | bit0;
+                const uint8_t bit0  = (plane0 >> bitIndex) & 1;
+                const uint8_t bit1  = (plane1 >> bitIndex) & 1;
+                const uint8_t pixel = (bit1 << 1) | bit0;
 
-                // transparent sprite pixel
+                // Transparent sprite pixel
                 if (pixel == 0)
                     continue;
 
-                int x = (int)spriteX + col;
-                int y = baseY + row;
+                const int x = (int)spriteX + col;
+                const int y = baseY + row;
 
                 if (x < 0 || x >= 256 || y < 0 || y >= 240)
                     continue;
 
-                // Leftmost 8 pixel masking rules
-                bool in_left8 = (x < 8);
-                bool sprite_visible_here = !in_left8 || spr_left8;
-                if (!sprite_visible_here)
+                // Leftmost 8 pixel masking rules (sprites)
+                const bool in_left8 = (x < 8);
+                if (in_left8 && !spr_left8)
                     continue;
 
                 // Priority: if behind BG, only draw if BG is universal bg color
                 if (behindBG && frame[y * 256 + x] != bgColor)
                     continue;
 
-                // ---------- Sprite 0 Hit ----------
-                // Set when sprite #0 overlaps a non-zero BG pixel.
-                // We approximate "BG pixel non-zero" by checking it's NOT universal bg color.
-                // Also apply left-8 masking: BG must be visible there for hit.
+                // ---------- Sprite 0 Hit (schedule it, don't assert here) ----------
+                // Approximate: overlap with non-zero BG pixel means "hit".
+                // Also apply left-8 mask rules: BG must be visible there too.
                 if (i == 0 && bg_enabled && spr_enabled) {
-                    bool bg_visible_here = !in_left8 || bg_left8;
-
+                    const bool bg_visible_here = !in_left8 || bg_left8;
                     if (bg_visible_here) {
-                        // Only count a hit if BG pixel is not "color 0"
                         if (frame[y * 256 + x] != bgColor) {
-                            // Commonly avoid x==255 quirk; harmless either way,
-                            // but this matches typical emulator behavior.
+                            // Avoid x==255 quirk
                             if (x != 255) {
-                                PPUSTATUS |= 0x40; // sprite 0 hit
+                                if (!sprite0_hit_pending) {
+                                    sprite0_hit_pending = true;
+                                    sprite0_hit_x = x;
+                                    sprite0_hit_y = y;
+                                }
                             }
                         }
                     }
                 }
-                // ----------------------------------
+                // ------------------------------------------------------------------
 
-                uint8_t palIndex = ppuRead(0x3F10 + palSel * 4 + pixel) & 0x3F;
+                // Sprite palettes start at $3F10 (with mirrors handled by ppuRead)
+                const uint8_t palIndex = ppuRead((uint16_t)(0x3F10 + palSel * 4 + pixel)) & 0x3F;
                 frame[y * 256 + x] = nes_colors[palIndex];
             }
         }
     }
 }
+

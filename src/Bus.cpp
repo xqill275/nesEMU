@@ -131,52 +131,67 @@ void bus::write(uint16_t addr, uint8_t data) {
 }
 
 
-void bus::clock() {
-    // PPU runs every system clock
+void bus::clock()
+{
+    // PPU always clocks
     connectedPPU->clock();
 
+    // CPU/APU/DMA happen on CPU ticks (1 CPU cycle per 3 PPU cycles)
+    if (systemClockCounter % 3 == 0)
+    {
+        // APU clocks once per CPU cycle (even during DMA)
+        if (connectedAPU) connectedAPU->clock();
 
-    // DMA steals CPU time but PPU keeps running
-    if (dma_transfer) {
+        if (dma_transfer)
+        {
+            // DMA dummy cycle: wait until an odd CPU cycle before starting reads/writes
+            // Use CPU-cycle parity, not PPU-cycle parity.
+            static uint64_t cpuCycleCount = 0; // local static ok, or make a member
+            cpuCycleCount++;
 
-        // The "dummy" cycle: DMA begins on an even CPU cycle.
-        // We approximate this using systemClockCounter parity.
-        if (dma_dummy) {
-            if (systemClockCounter % 2 == 1) {
-                dma_dummy = false;
-            }
-        } else {
-            // On even cycles: read from CPU bus
-            if (systemClockCounter % 2 == 0) {
-                uint16_t addr = (uint16_t)dma_page << 8 | dma_addr;
-                dma_data = read(addr, true);
-            }
-            // On odd cycles: write into OAM
-            else {
-                // Real NES writes starting at OAMADDR
-                connectedPPU->OAM[connectedPPU->OAMADDR] = dma_data;
-                connectedPPU->OAMADDR++;
-
-                dma_addr++;
-                if (dma_addr == 0x00) { // wrapped after 256 bytes
-                    dma_transfer = false;
-                    dma_dummy = true;
+            if (dma_dummy)
+            {
+                // On real hardware DMA begins on an even CPU cycle; many emus do:
+                // wait for cpuCycleCount to be odd then start.
+                if (cpuCycleCount & 1) {
+                    dma_dummy = false;
                 }
             }
-        }
+            else
+            {
+                // Alternate read/write each CPU cycle
+                if ((cpuCycleCount & 1) == 0)
+                {
+                    // Read from CPU memory
+                    uint16_t addr = (uint16_t(dma_page) << 8) | dma_addr;
+                    dma_data = read(addr, true);
+                }
+                else
+                {
+                    // Write to OAM at current OAMADDR
+                    connectedPPU->OAM[connectedPPU->OAMADDR] = dma_data;
+                    connectedPPU->OAMADDR++;
 
-        // CPU does NOT clock during DMA
-    }
-    else {
-        // CPU runs every 3rd PPU clock
-        if (systemClockCounter % 3 == 0) {
+                    dma_addr++;
+                    if (dma_addr == 0x00) { // wrapped after 256 bytes
+                        dma_transfer = false;
+                        dma_dummy = true;
+                    }
+                }
+            }
+
+            // CPU core is stalled during DMA (do not clock CPU)
+        }
+        else
+        {
+            // Normal CPU cycle
             connectedCPU->clock();
-            connectedAPU->clock();
         }
     }
 
-    // Handle NMI
-    if (connectedPPU->nmi) {
+    // Handle NMI (PPU asserts line; CPU samples/handles)
+    if (connectedPPU->nmi)
+    {
         connectedPPU->nmi = false;
         connectedCPU->nmi();
     }

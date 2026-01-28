@@ -27,11 +27,20 @@ public:
 
     void connectCartridge(cartridge* cart);
 
+    bool bgPixelNonZeroAt(int x, int y);
+
+    bool sprite0PixelNonZeroAt(int x, int y);
+
     std::array<uint8_t, 2048> vram{};
     std::array<uint8_t, 32>   palette{};
     std::array<uint32_t, 256 * 240> frame{};
     std::array<uint8_t, 256>  OAM{};
     std::vector<uint32_t> patternTable[2];
+
+    std::array<int, 240> dbg_scrollX{};
+    std::array<int, 240> dbg_scrollY{};
+    std::array<int, 240> dbg_baseNTX{};
+    std::array<int, 240> dbg_baseNTY{};
 
     // PPU registers
     uint8_t PPUCTRL   = 0x00;  // $2000
@@ -65,6 +74,10 @@ public:
     int16_t cycle    = 0;
 
    bool frame_complete;
+
+    bool sprite0_hit_pending = false;
+    int  sprite0_hit_x = -1;
+    int  sprite0_hit_y = -1;
 
 private:
     cartridge* cart = nullptr;
