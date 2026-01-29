@@ -14,14 +14,16 @@ bool Mapper000::cpuMapRead(uint16_t addr, uint32_t& mappedAddr) {
 }
 
 
-// CPU WRITE (same as read)
-bool Mapper000::cpuMapWrite(uint16_t addr, uint32_t& mappedAddr) {
+// CPU WRITE
+bool Mapper000::cpuMapWrite(uint16_t addr, uint32_t& mappedAddr, uint8_t data) {
+    (void)data;
     if (addr >= 0x8000 && addr <= 0xFFFF) {
         mappedAddr = addr & (prgBanks > 1 ? 0x7FFF : 0x3FFF);
         return true;
     }
     return false;
 }
+
 
 
 // PPU READ (0x0000–0x1FFF CHR ROM/RAM)

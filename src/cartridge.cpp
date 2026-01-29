@@ -1,7 +1,11 @@
 #include "header/cartridge.h"
 #include "Mappers/Mapper000.h"
+#include "Mappers/Mapper002.h"
+#include "Mappers/Mapper009.h"
 #include <fstream>
 #include <iostream>
+
+
 
 cartridge::cartridge(const std::string& filename)
 {
@@ -63,10 +67,16 @@ cartridge::cartridge(const std::string& filename)
 
     ifs.close();
 
-    // Mapper selection (you only have Mapper000 so far)
+    // Mapper selection
     switch (mapperID) {
         case 0:
             mapper = std::make_shared<Mapper000>(prgBanks, chrBanks);
+            break;
+        case 2:
+            mapper = std::make_shared<Mapper002>(prgBanks, chrBanks);
+            break;
+        case 9:
+            mapper = std::make_shared<Mapper009>(prgBanks, chrBanks);
             break;
 
         default:
@@ -90,11 +100,22 @@ bool cartridge::cpuRead(uint16_t addr, uint8_t& data)
 bool cartridge::cpuWrite(uint16_t addr, uint8_t data)
 {
     uint32_t mappedAddr = 0;
-    if (mapper && mapper->cpuMapWrite(addr, mappedAddr)) {
-        // NOTE: For most carts, writes here would go to PRG-RAM (not PRG-ROM).
-        // But this keeps your existing behaviour.
+    if (mapper && mapper->cpuMapWrite(addr, mappedAddr, data)) {
+
+        // Apply MMC2 mirroring override if present
+        if (mapperID == 9) {
+            auto* m9 = dynamic_cast<Mapper009*>(mapper.get());
+            if (m9 && m9->hasMirroringOverride()) {
+                mirror = m9->mirroringIsHorizontal() ? Mirror::HORIZONTAL : Mirror::VERTICAL;
+            }
+        }
+
+        if (mappedAddr == 0xFFFFFFFF)
+            return true;
+
         if (mappedAddr < prgRom.size())
             prgRom[mappedAddr] = data;
+
         return true;
     }
     return false;

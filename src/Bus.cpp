@@ -145,13 +145,13 @@ void bus::clock()
         if (dma_transfer)
         {
             // DMA dummy cycle: wait until an odd CPU cycle before starting reads/writes
-            // Use CPU-cycle parity, not PPU-cycle parity.
+            // Use CPU-cycle parity
             static uint64_t cpuCycleCount = 0; // local static ok, or make a member
             cpuCycleCount++;
 
             if (dma_dummy)
             {
-                // On real hardware DMA begins on an even CPU cycle; many emus do:
+                // On real hardware DMA begins on an even CPU cycle
                 // wait for cpuCycleCount to be odd then start.
                 if (cpuCycleCount & 1) {
                     dma_dummy = false;

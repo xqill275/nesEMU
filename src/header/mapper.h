@@ -12,7 +12,7 @@ public:
 
     // CPU mapping
     virtual bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) = 0;
-    virtual bool cpuMapWrite(uint16_t addr, uint32_t& mappedAddr) = 0;
+    virtual bool cpuMapWrite(uint16_t addr, uint32_t& mappedAddr, uint8_t data) = 0;
 
     // PPU mapping (CHR)
     virtual bool ppuMapRead(uint16_t addr, uint32_t& mappedAddr) = 0;

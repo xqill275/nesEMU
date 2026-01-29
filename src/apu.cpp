@@ -47,7 +47,6 @@ uint8_t apu::debugStatus4015() const {
     if (dmc.bytes_remaining > 0) s |= (1 << 4);
 
     if (dmc.irq) s |= (1 << 7);
-    // pulse2/tri/noise/dmc later
     if (frame_irq) s |= (1 << 6);
     return s;
 }
@@ -150,8 +149,8 @@ void apu::cpuWrite(uint16_t addr, uint8_t data) {
 
         if (irq_inhibit) frame_irq = false;
 
-        // Real hardware clocks immediately in 5-step mode on write (often emulated);
-        // we’ll ignore for now to keep things simple.
+        // Real hardware clocks immediately in 5-step mode on write ;
+        //  ignore for now
         return;
     }
     // -------- Pulse 2 registers ($4004-$4007) --------
@@ -165,7 +164,7 @@ void apu::cpuWrite(uint16_t addr, uint8_t data) {
     }
 
     if (addr == 0x4005) {
-        // Sweep not implemented yet (store mirror only)
+        // Sweep not implemented yet
         return;
     }
 
@@ -436,7 +435,7 @@ void apu::clock() {
 
     while (m_samplePhase >= 1.0) {
         m_samplePhase -= 1.0;
-        pushSample(sample()); // sample() you already have (Pulse 1 mix)
+        pushSample(sample()); // sample() already have (Pulse 1 mix)
     }
 }
 
@@ -570,7 +569,7 @@ void apu::clockLengthCounterNoise(Noise& n) {
 
 uint16_t apu::noisePeriodTable(uint8_t idx) {
     // NTSC noise periods (CPU cycles per LFSR shift)
-    // Common table used by most emulators.
+
     static constexpr uint16_t t[16] = {
         4, 8, 16, 32, 64, 96, 128, 160,
         202, 254, 380, 508, 762, 1016, 2034, 4068

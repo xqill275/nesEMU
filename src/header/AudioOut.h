@@ -11,7 +11,7 @@ public:
 
     apu* m_apu = nullptr;
 
-    // Opaque miniaudio types (defined in .cpp)
+
     struct Impl;
     Impl* impl = nullptr;
 };
