@@ -20,6 +20,8 @@ public:
     void updatePatternTable();
     void clock();
 
+    void ppu_prefetch_bg_tiles_for_mmc2(ppu* self,int y,int scrollX,int scrollY,int baseNTX,int baseNTY,uint16_t patternBase);
+
     void renderBackground();
     void renderSprites();
 
@@ -82,7 +84,7 @@ public:
 private:
     cartridge* cart = nullptr;
 
-    // Map $2000-$2FFF to your 2KB vram[] using cart mirroring
+    // Map $2000-$2FFF to  2KB vram[] using cart mirroring
     uint16_t mapNametableAddr(uint16_t addr) const;
 };
 

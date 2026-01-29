@@ -37,12 +37,12 @@ void ppu::connectCartridge(cartridge* c) {
 static inline uint8_t getBit(uint8_t v, int bit) { return (v >> bit) & 1; }
 
 // returns true if BG pixel at (x,y) is non-zero (i.e., not color 0)
-// This uses the same *frame-style* background fetch you already do in renderBackground().
+// This uses the same *frame-style* background fetch already do in renderBackground().
 bool ppu::bgPixelNonZeroAt(int x, int y)
 {
     if (!(PPUMASK & 0x08)) return false;
 
-    // Use scroll values from tram_addr (what your renderer uses)
+    // Use scroll values from tram_addr
     int scrollX = (int)tram_addr.coarse_x * 8 + (int)fine_x;
     int scrollY = (int)tram_addr.coarse_y * 8 + (int)tram_addr.fine_y;
 
@@ -80,7 +80,7 @@ bool ppu::bgPixelNonZeroAt(int x, int y)
     return px != 0;
 }
 
-// returns true if sprite0 pixel at (x,y) is non-zero
+// returns true if sprite0 pixel at (x,y) is non zero
 bool ppu::sprite0PixelNonZeroAt(int x, int y)
 {
     if (!(PPUMASK & 0x10)) return false;
@@ -97,7 +97,7 @@ bool ppu::sprite0PixelNonZeroAt(int x, int y)
     bool sprite8x16 = (PPUCTRL & 0x20) != 0;
     int spriteHeight = sprite8x16 ? 16 : 8;
 
-    int baseY = (int)spriteY + 1; // NES quirk
+    int baseY = (int)spriteY + 1;
 
     if (x < spriteX || x >= spriteX + 8) return false;
     if (y < baseY   || y >= baseY + spriteHeight) return false;
@@ -231,7 +231,7 @@ void ppu::cpuWrite(uint16_t addr, uint8_t data) {
             OAMADDR = data;
         } break;
 
-        // NOTE: you don't expose $2004 register in ppu.h, but CPU can still write it
+        // NOTE: I don't expose $2004 register in ppu.h, but CPU can still write it
         case 0x0004: { // OAMDATA
             OAM[OAMADDR] = data;
             OAMADDR++;
@@ -305,7 +305,7 @@ void ppu::clock()
         }
     }
 
-    // Visible area sprite0 hit test (very important for SMB-style split)
+    // Visible area sprite0 hit test
     if (scanline >= 0 && scanline < 240 && cycle >= 1 && cycle <= 256)
     {
         bool bg_enabled  = (PPUMASK & 0x08) != 0;
@@ -327,7 +327,7 @@ void ppu::clock()
                 {
                     if (bgPixelNonZeroAt(x, y) && sprite0PixelNonZeroAt(x, y))
                     {
-                        // common quirk: don't set at x==255
+                        // don't set at x==255
                         if (x != 255) PPUSTATUS |= 0x40;
                     }
                 }
@@ -336,7 +336,7 @@ void ppu::clock()
     }
 
     if (scanline >= 0 && scanline < 240 && cycle == 0) {
-        // Use what CPU last wrote ($2005/$2006) which updates tram_addr + fine_x in your implementation
+        // Use what CPU last wrote ($2005/$2006) which updates tram_addr + fine_x
         dbg_scrollX[scanline] = (int)tram_addr.coarse_x * 8 + (int)fine_x;
         dbg_scrollY[scanline] = (int)tram_addr.coarse_y * 8 + (int)tram_addr.fine_y;
 
@@ -448,6 +448,51 @@ void ppu::updatePatternTable() {
 }
 
 
+// Do the two "off-screen" background tile fetches the real PPU performs,
+// so MMC2 (Mapper 9) latch snooping sees the 34th tile pattern reads.
+void ppu::ppu_prefetch_bg_tiles_for_mmc2(ppu* self,int y,int scrollX,int scrollY,int baseNTX,int baseNTY,uint16_t patternBase)
+{
+    // y is 0..239
+    int worldY = y + scrollY + baseNTY * 240;
+    int ntY    = (worldY / 240) & 1;
+    int localY = worldY % 240;
+
+    int tileY  = localY / 8;
+    int fineY  = localY & 7;
+
+    // Prefetch the next two tiles beyond x=255:
+    // x=256..263 => tileX 32
+    // x=264..271 => tileX 33
+    for (int extra = 0; extra < 2; extra++) {
+        int pseudoX = 256 + extra * 8;
+
+        int worldX = pseudoX + scrollX + baseNTX * 256;
+        int ntX    = (worldX / 256) & 1;
+        int localX = worldX % 256;
+
+        int tileX = localX / 8;
+
+        int ntIndex = ntY * 2 + ntX;
+        uint16_t nametableBase = 0x2000 + (uint16_t)ntIndex * 0x0400;
+
+        // Nametable fetch (tile ID)
+        uint16_t ntTileAddr = nametableBase + (uint16_t)tileY * 32 + (uint16_t)tileX;
+        uint8_t tileIndex = self->ppuRead(ntTileAddr);
+
+        // Attribute fetch (not strictly required for MMC2 latch, but matches real access pattern better)
+        uint16_t attrAddr = nametableBase + 0x03C0
+                          + (uint16_t)(tileY / 4) * 8
+                          + (uint16_t)(tileX / 4);
+        (void)self->ppuRead(attrAddr);
+
+        // Pattern fetches (THIS is what MMC2 snoops)
+        uint16_t patternAddr = patternBase + (uint16_t)tileIndex * 16 + (uint16_t)fineY;
+        (void)self->ppuRead(patternAddr);
+        (void)self->ppuRead(patternAddr + 8);
+    }
+}
+
+
 // Background renderer (frame-based scrolling using tram_addr/fine_x)
 void ppu::renderBackground() {
     uint32_t bgColor = nes_colors[ppuRead(0x3F00) & 0x3F];
@@ -516,6 +561,7 @@ void ppu::renderBackground() {
 
             frame[y * 256 + x] = nes_colors[palIndex];
         }
+        ppu_prefetch_bg_tiles_for_mmc2(this, y, scrollX, scrollY, baseNTX, baseNTY, patternBase);
     }
 }
 
@@ -537,14 +583,14 @@ void ppu::renderSprites()
 
     const bool sprite8x16 = (PPUCTRL & 0x20) != 0;
 
-    // Universal background color (used as "BG color 0" in your renderer)
+    // Universal background color (used as "BG color 0" in my renderer)
     const uint32_t bgColor = nes_colors[ppuRead(0x3F00) & 0x3F];
 
     // Pattern table selection for 8x8 sprites
     const uint16_t patternBase8x8 = (PPUCTRL & 0x08) ? 0x1000 : 0x0000;
 
     // Draw sprites in OAM order (0..63). Real PPU priority is a bit more nuanced,
-    // but this is fine for your current renderer.
+    // but this is fine for  current renderer.
     for (int i = 0; i < 64; i++) {
         const int o = i * 4;
 

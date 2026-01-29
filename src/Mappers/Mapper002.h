@@ -1,0 +1,21 @@
+#ifndef MAPPER002_H
+#define MAPPER002_H
+
+#include "mapper.h"
+
+class Mapper002 : public Mapper {
+public:
+    Mapper002(uint8_t prgBanks, uint8_t chrBanks);
+    ~Mapper002() override = default;
+
+    bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) override;
+    bool cpuMapWrite(uint16_t addr, uint32_t& mappedAddr, uint8_t data) override;
+
+    bool ppuMapRead(uint16_t addr, uint32_t& mappedAddr) override;
+    bool ppuMapWrite(uint16_t addr, uint32_t& mappedAddr) override;
+
+private:
+    uint8_t prgBankSelect = 0; // 16KB bank at $8000-$BFFF
+};
+
+#endif

@@ -75,6 +75,10 @@ set(SOURCES
         src/external/miniaudio/miniaudio.h
         src/AudioOut.cpp
         src/header/AudioOut.h
+        src/Mappers/Mapper002.cpp
+        src/Mappers/Mapper002.h
+        src/Mappers/Mapper009.cpp
+        src/Mappers/Mapper009.h
 )
 
 # Create executable (IMPORTANT!)

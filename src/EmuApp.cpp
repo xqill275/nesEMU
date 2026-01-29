@@ -392,7 +392,6 @@ void EmuApp::drawPanels()
             }
         }
         // final row: 4010..4017 (already printed 4010..401F above, but we only care to 4017)
-        // If you want a clean exact range, you can special-case it. This is fine for quick debug.
         ImGui::EndChild();
 
         ImGui::End();
