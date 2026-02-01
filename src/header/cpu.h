@@ -66,6 +66,11 @@ public:
 
     bool complete();
 
+    //debug helpers
+    uint8_t  prev_opcode = 0x00;
+    uint16_t prev_PC     = 0x0000;
+
+
 private:
 
     // Internal fields

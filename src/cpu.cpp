@@ -2,6 +2,8 @@
 #include "header/cpu.h"
 #include "header/Bus.h"
 #include <iostream>
+#include <sstream>
+
 #include "external/imgui/imgui.h"
 
 cpu::cpu() {
@@ -163,11 +165,19 @@ uint8_t cpu::REL() {
 
 // Operations
 uint8_t cpu::XXX() {
-    std::cout << "Unknown opcode: $"
-              << std::hex << (int)opcode
-              << " at PC $"
-              << std::hex << PC << "\n";
-    return 0;
+    std::ostringstream oss;
+
+    oss << "Unknown opcode: $"
+        << std::hex << (int)opcode
+        << " at PC $"
+        << std::hex << PC
+        << "\nPrevious opcode: $"
+        << std::hex << (int)prev_opcode
+        << " at PC $"
+        << std::hex << prev_PC;
+
+    std::cout << oss.str() << "\n";
+    throw std::runtime_error(oss.str());
 }
 
 uint8_t cpu::NOP() {
@@ -397,6 +407,9 @@ void cpu::clock() {
         // Fetch opcode at current PC
         opcode = read(PC);
         const Op& ins = lookup[opcode];
+        prev_opcode = opcode;
+        prev_PC = PC;
+
         //std::cout << ins.name << " - " << std::hex << (int)opcode << std::endl;
         // Run addressing mode (it will advance PC to next instruction by design)
         uint8_t add_cycles_addr = 0;

@@ -1,8 +1,8 @@
 // header/AudioOut.h
-#pragma once
-#include <cstdint>
 
 class apu;
+#pragma once
+#include <cstdint>
 
 class AudioOut {
 public:

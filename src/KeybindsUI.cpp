@@ -66,6 +66,7 @@ bool DrawPopup(Keybinds& binds, bool& openPopup)
         ImGui::Separator();
         Row("Run/Pause", binds.runGame);
         Row("Reset", binds.resetGame);
+        Row("Step Game", binds.stepGame);
 
         if (g_rebindingTarget) {
             ImGuiKey pressed = CaptureAnyPressedKey();
