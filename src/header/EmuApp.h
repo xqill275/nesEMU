@@ -15,6 +15,8 @@ struct GLFWwindow;
 
 class EmuApp {
 public:
+    void stepEMU();
+
     bool init();
     int  run();
     void shutdown();

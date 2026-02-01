@@ -28,6 +28,7 @@ struct Keybinds {
     // Emulator shortcuts
     ImGuiKey runGame;
     ImGuiKey resetGame;
+    ImGuiKey stepGame;
 
     static Keybinds Defaults() {
         Keybinds k{};
@@ -42,6 +43,7 @@ struct Keybinds {
 
         k.runGame   = ImGuiKey_F5;
         k.resetGame = ImGuiKey_F1;
+        k.stepGame = ImGuiKey_F6;
         return k;
     }
 };
@@ -60,6 +62,7 @@ inline bool SaveKeybinds(const Keybinds& k, const std::string& path) {
     out << "select=" << (int)k.select << "\n";
     out << "runGame=" << (int)k.runGame << "\n";
     out << "resetGame=" << (int)k.resetGame << "\n";
+    out << "stepGame=" << (int)k.stepGame << "\n";
     return true;
 }
 
@@ -81,6 +84,7 @@ inline bool LoadKeybinds(Keybinds& k, const std::string& path) {
         {"select", &k.select},
         {"runGame", &k.runGame},
         {"resetGame", &k.resetGame},
+        {"stepGame", &k.stepGame}
     };
 
     std::string line;

@@ -18,6 +18,12 @@
 #include <windows.h>
 #endif
 
+
+void EmuApp::stepEMU() {
+    do { BUS.clock(); } while (CPU.complete());
+    do { BUS.clock(); } while (!CPU.complete());
+}
+
 bool EmuApp::init()
 {
     // GLFW
@@ -141,6 +147,7 @@ void EmuApp::tickEmulation()
     // shortcuts
     if (ImGui::IsKeyPressed(binds.runGame)) running = !running;
     if (ImGui::IsKeyPressed(binds.resetGame)) BUS.reset();
+    if (ImGui::IsKeyPressed(binds.stepGame)) stepEMU();
 
     if (!running) return;
 
@@ -190,7 +197,7 @@ void EmuApp::drawMenuBar()
         if (ImGui::MenuItem(running ? "Pause" : "Run", ImGui::GetKeyName(binds.runGame))) running = !running;
         if (ImGui::MenuItem("Reset Game", ImGui::GetKeyName(binds.resetGame))) BUS.reset();
 
-        if (ImGui::MenuItem("Step Instruction")) {
+        if (ImGui::MenuItem("Step Instruction", ImGui::GetKeyName(binds.stepGame))) {
             do { BUS.clock(); } while (CPU.complete());
             do { BUS.clock(); } while (!CPU.complete());
         }

@@ -2,6 +2,7 @@
 #include "Mappers/Mapper000.h"
 #include "Mappers/Mapper002.h"
 #include "Mappers/Mapper009.h"
+#include "Mappers/Mapper001.h"
 #include <fstream>
 #include <iostream>
 
@@ -58,6 +59,8 @@ cartridge::cartridge(const std::string& filename)
         chrRom.resize(chrSize);
     }
 
+    prgRam.resize(8192, 0x00);
+
     // Read PRG + CHR
     ifs.read(reinterpret_cast<char*>(prgRom.data()), prgSize);
 
@@ -71,6 +74,9 @@ cartridge::cartridge(const std::string& filename)
     switch (mapperID) {
         case 0:
             mapper = std::make_shared<Mapper000>(prgBanks, chrBanks);
+            break;
+        case 1:
+            mapper = std::make_shared<Mapper001>(prgBanks, chrBanks);
             break;
         case 2:
             mapper = std::make_shared<Mapper002>(prgBanks, chrBanks);
@@ -91,6 +97,13 @@ bool cartridge::cpuRead(uint16_t addr, uint8_t& data)
 {
     uint32_t mappedAddr = 0;
     if (mapper && mapper->cpuMapRead(addr, mappedAddr)) {
+
+        // PRG-RAM region (MMC1 etc.)
+        if (addr >= 0x6000 && addr <= 0x7FFF) {
+            data = prgRam[mappedAddr & 0x1FFF];
+            return true;
+        }
+
         data = prgRom[mappedAddr];
         return true;
     }
@@ -110,8 +123,26 @@ bool cartridge::cpuWrite(uint16_t addr, uint8_t data)
             }
         }
 
+        if (mapperID == 1) {
+            auto* m1 = dynamic_cast<Mapper001*>(mapper.get());
+            if (m1) {
+                // MMC1 mirroring bits: 0,1 one-screen; 2 vertical; 3 horizontal
+                // Your cart enum only supports H/V/4-screen, so:
+                uint8_t mir = (m1->getControl() & 0x03); // if you expose getControl()
+                if (mir == 2) mirror = Mirror::VERTICAL;
+                else if (mir == 3) mirror = Mirror::HORIZONTAL;
+                // one-screen modes: pick either, most emus map them specially; you can treat as vertical for now
+                else mirror = Mirror::VERTICAL;
+            }
+        }
+
         if (mappedAddr == 0xFFFFFFFF)
             return true;
+
+        if (addr >= 0x6000 && addr <= 0x7FFF) {
+            prgRam[mappedAddr & 0x1FFF] = data;
+            return true;
+        }
 
         if (mappedAddr < prgRom.size())
             prgRom[mappedAddr] = data;

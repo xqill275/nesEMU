@@ -17,6 +17,8 @@ public:
     std::vector<uint8_t> prgRom;
     std::vector<uint8_t> chrRom;
 
+    std::vector<uint8_t> prgRam; // 8KB PRG RAM (battery-backed on many carts)
+
     uint8_t mapperID = 0;
     uint8_t prgBanks = 0;
     uint8_t chrBanks = 0;

@@ -79,6 +79,8 @@ set(SOURCES
         src/Mappers/Mapper002.h
         src/Mappers/Mapper009.cpp
         src/Mappers/Mapper009.h
+        src/Mappers/Mapper001.cpp
+        src/Mappers/Mapper001.h
 )
 
 # Create executable (IMPORTANT!)
