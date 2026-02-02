@@ -86,7 +86,11 @@ void apu::cpuWrite(uint16_t addr, uint8_t data) {
     }
 
     if (addr == 0x4001) {
-        // Sweep not implemented yet (store mirror only)
+        p1.sweep_enabled = (data & 0x80) != 0;
+        p1.sweep_period  = (data >> 4) & 0x07;
+        p1.sweep_negate  = (data & 0x08) != 0;
+        p1.sweep_shift   = (data & 0x07);
+        p1.sweep_reload  = true;
         return;
     }
 
@@ -110,6 +114,15 @@ void apu::cpuWrite(uint16_t addr, uint8_t data) {
         p1.env_start = true;
         p1.seq_step = 0;
 
+        return;
+    }
+
+    if (addr == 0x4005) {
+        p2.sweep_enabled = (data & 0x80) != 0;
+        p2.sweep_period  = (data >> 4) & 0x07;
+        p2.sweep_negate  = (data & 0x08) != 0;
+        p2.sweep_shift   = (data & 0x07);
+        p2.sweep_reload  = true;
         return;
     }
 
@@ -319,8 +332,10 @@ void apu::halfFrame() {
     if (!tri.control_flag && tri.length_counter > 0) {
         tri.length_counter--;
     }
-    // sweep later
+    clockSweep(p1, true);   // pulse 1 has special negate behavior
+    clockSweep(p2, false);
 }
+
 
 void apu::clockFrameSequencer() {
     // Frame sequencer runs at 240Hz-ish; easiest is to schedule by CPU cycles.
@@ -379,6 +394,7 @@ uint8_t apu::pulseOutput(const Pulse& p) const {
 
 void apu::clock() {
     cpu_cycle++;
+    bool halfRateTick = (cpu_cycle & 1) == 0;
 
     // Frame sequencer events
     clockFrameSequencer();
@@ -386,24 +402,43 @@ void apu::clock() {
 
     // Pulse timer/sequencer runs at CPU rate
     // On each CPU cycle, decrement timer counter; when hits 0, reload and advance sequence.
-    if (p1.timer_counter == 0) {
-        p1.timer_counter = p1.timer;
-        p1.seq_step = (p1.seq_step + 1) & 7;
-    } else {
-        p1.timer_counter--;
-    }
+    // Pulse + Noise timers run at CPU/2
+    if (halfRateTick) {
+        // Pulse 1
+        if (p1.timer_counter == 0) {
+            p1.timer_counter = p1.timer + 1;
+            p1.seq_step = (p1.seq_step + 1) & 7;
+        } else {
+            p1.timer_counter--;
+        }
 
-    if (p2.timer_counter == 0) {
-        p2.timer_counter = p2.timer;
-        p2.seq_step = (p2.seq_step + 1) & 7;
-    } else {
-        p2.timer_counter--;
+        // Pulse 2
+        if (p2.timer_counter == 0) {
+            p2.timer_counter = p2.timer + 1;
+            p2.seq_step = (p2.seq_step + 1) & 7;
+        } else {
+            p2.timer_counter--;
+        }
+
+        // Noise
+        if (noise.timer_counter == 0) {
+            noise.timer_counter = noisePeriodTable(noise.period);
+            if (noise.enabled && noise.length_counter > 0) {
+                uint16_t bit0 = noise.lfsr & 0x0001;
+                uint16_t tap  = noise.mode ? ((noise.lfsr >> 6) & 0x0001)
+                                           : ((noise.lfsr >> 1) & 0x0001);
+                uint16_t feedback = bit0 ^ tap;
+
+                noise.lfsr >>= 1;
+                noise.lfsr |= (feedback << 14);
+            }
+        } else {
+            noise.timer_counter--;
+        }
     }
 
     if (tri.timer_counter == 0) {
-        tri.timer_counter = tri.timer;
-
-        // Triangle advances only when it is “audible” (linear + length nonzero)
+        tri.timer_counter = tri.timer + 1;
         if (tri.length_counter > 0 && tri.linear_counter > 0) {
             tri.seq_step = (tri.seq_step + 1) & 31;
         }
@@ -411,24 +446,7 @@ void apu::clock() {
         tri.timer_counter--;
     }
 
-    // Noise timer/LFSR
-    if (noise.timer_counter == 0) {
-        noise.timer_counter = noisePeriodTable(noise.period);
 
-        // Update LFSR if channel is potentially active
-        if (noise.enabled && noise.length_counter > 0) {
-            // feedback bit uses bit0 XOR bit1 (mode=0) or bit0 XOR bit6 (mode=1)
-            uint16_t bit0 = noise.lfsr & 0x0001;
-            uint16_t tap  = noise.mode ? ((noise.lfsr >> 6) & 0x0001)
-                                       : ((noise.lfsr >> 1) & 0x0001);
-            uint16_t feedback = bit0 ^ tap;
-
-            noise.lfsr >>= 1;
-            noise.lfsr |= (feedback << 14); // keep 15-bit register
-        }
-    } else {
-        noise.timer_counter--;
-    }
     // ---- audio sample generation ----
     // We are clocked at CPU rate. Convert CPU cycles -> audio samples.
     m_samplePhase += (double)m_sampleRate / CPU_HZ;
@@ -441,8 +459,8 @@ void apu::clock() {
 
 float apu::sample() const {
     // ----- Pulse mixer -----
-    uint8_t p1o = pulseOutput(p1);
-    uint8_t p2o = pulseOutput(p2);
+    uint8_t p1o = pulse1Output();
+    uint8_t p2o = pulse2Output();
     int pulseSum = (int)p1o + (int)p2o;
 
     float pulseOut = 0.0f;
@@ -669,5 +687,80 @@ void apu::clockDMC() {
 uint8_t apu::dmcOutput() const {
     // DMC output is the DAC level 0..127
     return dmc.output_level & 0x7F;
+}
+
+uint16_t apu::sweepTargetPeriod(const Pulse& p, bool isPulse1) const
+{
+    if (p.sweep_shift == 0) return p.timer; // no change
+
+    uint16_t change = p.timer >> p.sweep_shift;
+
+    if (!p.sweep_negate) {
+        return (uint16_t)(p.timer + change);
+    } else {
+        // Negate behavior differs:
+        // Pulse 1 uses ones' complement: period - change - 1
+        // Pulse 2 uses normal subtract:   period - change
+        if (isPulse1) return (uint16_t)(p.timer - change - 1);
+        else          return (uint16_t)(p.timer - change);
+    }
+}
+
+bool apu::sweepMuted(const Pulse& p, bool isPulse1) const
+{
+    // If timer < 8 pulse channel is silenced (you already do this in pulseOutput)
+    if (p.timer < 8) return true;
+
+    // If sweep enabled and shift > 0, compute target and check overflow > 0x7FF
+    if (p.sweep_enabled && p.sweep_shift > 0) {
+        uint16_t target = sweepTargetPeriod(p, isPulse1);
+        if (target > 0x7FF) return true;
+    }
+
+    return false;
+}
+
+void apu::clockSweep(Pulse& p, bool isPulse1)
+{
+    // Sweep unit clocks on half-frame
+    // Divider counts down, reload happens when sweep_reload is set
+    // If enabled and shift > 0 and not muted, apply new period when divider hits 0.
+
+    if (p.sweep_divider == 0) {
+        // When divider reaches 0, potentially apply sweep
+        if (p.sweep_enabled && p.sweep_shift > 0) {
+            uint16_t target = sweepTargetPeriod(p, isPulse1);
+
+            // Only apply if within range and timer is valid
+            if (target <= 0x7FF && p.timer >= 8) {
+                p.timer = target;
+            }
+        }
+
+        // Reload divider (period is stored as N, divider reloads to N+1 on hardware)
+        p.sweep_divider = p.sweep_period + 1;
+    } else {
+        p.sweep_divider--;
+    }
+
+    // If a write occurred, reload divider (happens after the clock behavior)
+    if (p.sweep_reload) {
+        p.sweep_reload = false;
+        p.sweep_divider = p.sweep_period + 1;
+    }
+}
+
+uint8_t apu::pulse1Output() const {
+    if (p1.sweep_enabled && p1.sweep_shift > 0) {
+        if (sweepTargetPeriod(p1, true) > 0x7FF) return 0;
+    }
+    return pulseOutput(p1);
+}
+
+uint8_t apu::pulse2Output() const {
+    if (p2.sweep_enabled && p2.sweep_shift > 0) {
+        if (sweepTargetPeriod(p2, false) > 0x7FF) return 0;
+    }
+    return pulseOutput(p2);
 }
 

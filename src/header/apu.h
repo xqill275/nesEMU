@@ -35,6 +35,8 @@ public:
 
     void setDmcReader(std::function<uint8_t(uint16_t)> fn) { m_dmcRead = std::move(fn); }
 
+
+
 private:
     // iNES / NES APU base clock (NTSC)
     static constexpr double CPU_HZ = 1789773.0;
@@ -75,7 +77,15 @@ private:
         // Length counter
         uint8_t length_counter = 0;
 
-        // For now we ignore sweep ($4001) (add later)
+        // Sweep ($4001/$4005)
+        bool    sweep_enabled = false;
+        uint8_t sweep_period  = 0;   // 0..7 (divider reload value)
+        bool    sweep_negate  = false;
+        uint8_t sweep_shift   = 0;   // 0..7
+
+        bool    sweep_reload  = false;
+        uint8_t sweep_divider = 0;   // counts down
+
     } p1, p2;
 
     // -------- Triangle channel --------
@@ -174,6 +184,16 @@ private:
 
     void pushSample(float s);
     uint32_t availableSamples() const;
+
+    //sweeper
+    void clockSweep(Pulse& p, bool isPulse1);
+
+    uint8_t pulse1Output() const;
+
+    uint8_t pulse2Output() const;
+
+    uint16_t sweepTargetPeriod(const Pulse& p, bool isPulse1) const;
+    bool sweepMuted(const Pulse& p, bool isPulse1) const;
 
 private:
     std::function<uint8_t(uint16_t)> m_dmcRead;
