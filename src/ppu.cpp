@@ -691,4 +691,3 @@ void ppu::renderSprites()
         }
     }
 }
-
