@@ -15,6 +15,7 @@ uint8_t apu::lengthTable(uint8_t idx) {
 void apu::reset() {
     for (auto& b : reg) b = 0x00;
 
+    frame_counter = 0;
     frame_mode = 0;
     irq_inhibit = false;
     frame_irq = false;
@@ -56,13 +57,17 @@ uint8_t apu::cpuRead(uint16_t addr, bool readonly) {
 
     if (addr == 0x4015) {
         uint8_t s = 0;
-        if (p1.length_counter > 0) s |= (1 << 0);
-        if (p2.length_counter > 0) s |= (1 << 1);
-        if (tri.length_counter > 0) s |= (1 << 2);
-        if (noise.length_counter > 0) s |= (1 << 3);
-        if (frame_irq) s |= (1 << 6);
 
-        // Reading $4015 clears frame IRQ
+        if (p1.length_counter    > 0) s |= (1 << 0);
+        if (p2.length_counter    > 0) s |= (1 << 1);
+        if (tri.length_counter   > 0) s |= (1 << 2);
+        if (noise.length_counter > 0) s |= (1 << 3);
+        if (dmc.bytes_remaining  > 0) s |= (1 << 4); // DMC active
+
+        if (frame_irq) s |= (1 << 6);
+        if (dmc.irq)   s |= (1 << 7); // DMC IRQ
+
+        // Reading $4015 clears frame IRQ only
         frame_irq = false;
         return s;
     }
@@ -157,13 +162,20 @@ void apu::cpuWrite(uint16_t addr, uint8_t data) {
 
     // -------- Frame counter ($4017) --------
     if (addr == 0x4017) {
-        frame_mode = (data & 0x80) ? 1 : 0;
+        frame_mode  = (data & 0x80) ? 1 : 0;
         irq_inhibit = (data & 0x40) != 0;
 
         if (irq_inhibit) frame_irq = false;
 
-        // Real hardware clocks immediately in 5-step mode on write ;
-        //  ignore for now
+        // Writing $4017 resets the frame sequencer timing
+        frame_counter = 0;
+
+        // In 5-step mode, hardware clocks immediately (quarter + half)
+        if (frame_mode == 1) {
+            quarterFrame();
+            halfFrame();
+        }
+
         return;
     }
     // -------- Pulse 2 registers ($4004-$4007) --------
@@ -176,10 +188,6 @@ void apu::cpuWrite(uint16_t addr, uint8_t data) {
         return;
     }
 
-    if (addr == 0x4005) {
-        // Sweep not implemented yet
-        return;
-    }
 
     if (addr == 0x4006) {
         p2.timer = (p2.timer & 0xFF00) | data;
@@ -338,35 +346,31 @@ void apu::halfFrame() {
 
 
 void apu::clockFrameSequencer() {
-    // Frame sequencer runs at 240Hz-ish; easiest is to schedule by CPU cycles.
-    //
-    // NTSC frame counter steps are commonly emulated using these CPU-cycle points:
-    // 4-step: 3729, 7457, 11186, 14916 (IRQ on last if not inhibited)
-    // 5-step: 3729, 7457, 11186, 14916, 18640 (no frame IRQ)
-    //
-    // We’ll use cpu_cycle modulo the sequence length.
+    // Advance once per CPU cycle
+    frame_counter++;
 
     if (frame_mode == 0) {
-        // 4-step sequence length ~14916 CPU cycles
-        uint32_t step = (uint32_t)(cpu_cycle % 14916);
+        // 4-step sequence
+        if (frame_counter == 3729)  quarterFrame();
+        if (frame_counter == 7457)  { quarterFrame(); halfFrame(); }
+        if (frame_counter == 11186) quarterFrame();
 
-        if (step == 3729)  quarterFrame();
-        if (step == 7457)  { quarterFrame(); halfFrame(); }
-        if (step == 11186) quarterFrame();
-        if (step == 14915) {
-            // last tick
-            quarterFrame(); halfFrame();
+        if (frame_counter == 14916) {
+            quarterFrame();
+            halfFrame();
             if (!irq_inhibit) frame_irq = true;
+            frame_counter = 0;
         }
     } else {
-        // 5-step sequence length ~18640 CPU cycles
-        uint32_t step = (uint32_t)(cpu_cycle % 18640);
+        // 5-step sequence (no frame IRQ)
+        if (frame_counter == 3729)  quarterFrame();
+        if (frame_counter == 7457)  { quarterFrame(); halfFrame(); }
+        if (frame_counter == 11186) quarterFrame();
+        if (frame_counter == 14916) { quarterFrame(); halfFrame(); }
 
-        if (step == 3729)  quarterFrame();
-        if (step == 7457)  { quarterFrame(); halfFrame(); }
-        if (step == 11186) quarterFrame();
-        if (step == 14916) { quarterFrame(); halfFrame(); }
-        // step == 18639 ends; no IRQ in 5-step
+        if (frame_counter == 18640) {
+            frame_counter = 0;
+        }
     }
 }
 
@@ -764,3 +768,7 @@ uint8_t apu::pulse2Output() const {
     return pulseOutput(p2);
 }
 
+bool apu::irqLine() const {
+    // APU can assert IRQ from frame counter or DMC
+    return frame_irq || dmc.irq;
+}

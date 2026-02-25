@@ -54,6 +54,9 @@ public:
     void clock();             // Execute one CPU cycle
     void stepInstruction();   // Execute exactly one instruction
     void nmi();
+
+    void irq();
+
     uint8_t fetch();          // Fetch operand based on addressing mode
 
     // Bus read/write

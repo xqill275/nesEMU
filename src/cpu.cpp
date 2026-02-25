@@ -467,6 +467,35 @@ void cpu::nmi() {
     cycles = 8;
 }
 
+void cpu::irq() {
+    // Maskable IRQ: ignored if I flag set
+    if (getFlag(I)) return;
+
+    // If we're mid-instruction, real 6502 samples IRQ between instructions.
+    // For your "call irq() every CPU tick" approach, only take it when ready.
+    if (cycles != 0) return;
+
+    // Push PC (high then low)
+    push((PC >> 8) & 0x00FF);
+    push(PC & 0x00FF);
+
+    // Push status with B=0, U=1
+    setFlag(B, false);
+    setFlag(U, true);
+    push(P);
+
+    // Set interrupt disable
+    setFlag(I, true);
+
+    // Load IRQ/BRK vector ($FFFE/$FFFF)
+    uint16_t lo = read(0xFFFE);
+    uint16_t hi = read(0xFFFF);
+    PC = (hi << 8) | lo;
+
+    // IRQ takes 7 cycles
+    cycles = 7;
+}
+
 uint8_t cpu::PLP() {
     P = pop();
     P &= ~FLAGS::B;   // clear B flag

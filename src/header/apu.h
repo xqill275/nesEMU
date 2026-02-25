@@ -10,6 +10,8 @@ class apu {
 public:
     apu() = default;
 
+    uint32_t frame_counter = 0;
+
     void reset();
 
     // CPU memory-mapped interface
@@ -34,6 +36,8 @@ public:
     uint32_t popSamples(float* out, uint32_t frames);
 
     void setDmcReader(std::function<uint8_t(uint16_t)> fn) { m_dmcRead = std::move(fn); }
+
+    bool irqLine() const;
 
 
 
@@ -191,6 +195,8 @@ private:
     uint8_t pulse1Output() const;
 
     uint8_t pulse2Output() const;
+
+
 
     uint16_t sweepTargetPeriod(const Pulse& p, bool isPulse1) const;
     bool sweepMuted(const Pulse& p, bool isPulse1) const;

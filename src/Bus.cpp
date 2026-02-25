@@ -20,6 +20,12 @@ void bus::connectPPU(ppu* ppu) {
 
 void bus::connectAPU(apu *apu) {
     connectedAPU = apu;
+
+    if (connectedAPU) {
+        connectedAPU->setDmcReader([this](uint16_t a) -> uint8_t {
+            return this->read(a, true);
+        });
+    }
 }
 
 
@@ -141,6 +147,9 @@ void bus::clock()
     {
         // APU clocks once per CPU cycle (even during DMA)
         if (connectedAPU) connectedAPU->clock();
+        if (connectedAPU && connectedAPU->irqLine()) {
+            connectedCPU->irq();
+        }
 
         if (dma_transfer)
         {

@@ -86,6 +86,14 @@ set(SOURCES
 # Create executable (IMPORTANT!)
 add_executable(nesEMU ${SOURCES})
 
+if (MINGW)
+    target_link_options(nesEMU PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++
+    )
+endif()
+
 target_include_directories(nesEMU PUBLIC
         src/header
         src/external/glad/include
