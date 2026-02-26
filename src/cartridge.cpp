@@ -95,18 +95,20 @@ cartridge::cartridge(const std::string& filename)
 
 bool cartridge::cpuRead(uint16_t addr, uint8_t& data)
 {
-    uint32_t mappedAddr = 0;
-    if (mapper && mapper->cpuMapRead(addr, mappedAddr)) {
-
-        // PRG-RAM region (MMC1 etc.)
-        if (addr >= 0x6000 && addr <= 0x7FFF) {
-            data = prgRam[mappedAddr & 0x1FFF];
-            return true;
-        }
-
-        data = prgRom[mappedAddr];
+    // PRG-RAM region is usually $6000-$7FFF (even on NROM/UNROM)
+    if (addr >= 0x6000 && addr <= 0x7FFF) {
+        data = prgRam[addr & 0x1FFF];
         return true;
     }
+
+    uint32_t mappedAddr = 0;
+    if (mapper && mapper->cpuMapRead(addr, mappedAddr)) {
+        if (mappedAddr < prgRom.size()) {
+            data = prgRom[mappedAddr];
+            return true;
+        }
+    }
+
     return false;
 }
 
