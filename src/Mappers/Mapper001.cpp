@@ -3,7 +3,7 @@
 Mapper001::Mapper001(uint8_t prgBanks_, uint8_t chrBanks_)
     : Mapper(prgBanks_, chrBanks_) {
 
-    // Power-on defaults (common behavior expected by many games)
+    // Power on defaults
     shiftReg = 0x10;
     control  = 0x0C; // PRG mode 3, 16KB switch, last bank fixed
     chrBank0 = 0x00;

@@ -14,14 +14,14 @@ public:
 
     void reset();
 
-    // CPU memory-mapped interface
+    // CPU memory mapped interface
     uint8_t cpuRead(uint16_t addr, bool readonly = false);
     void    cpuWrite(uint16_t addr, uint8_t data);
 
     // Tick APU at CPU clock rate (once per CPU cycle)
     void clock();
 
-    // Produce a mono sample (no resampling here yet; just current mixed level)
+    // Produce a mono sample (no resampling here yet just current mixed level)
     float sample() const;
 
     // Debug helpers (for your panel)

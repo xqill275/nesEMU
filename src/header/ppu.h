@@ -46,7 +46,7 @@ public:
     std::array<int, 240> dbg_baseNTX{};
     std::array<int, 240> dbg_baseNTY{};
 
-    // NEW: per-scanline pattern/sprite mode snapshots
+    // per-scanline pattern/sprite mode snapshots
     std::array<uint16_t, 240> dbg_bgPatternBase{};
     std::array<uint16_t, 240> dbg_sprPatternBase{};
     std::array<bool, 240>     dbg_sprite8x16{};
