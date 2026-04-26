@@ -14,7 +14,7 @@ public:
 
     uint8_t getControl() const { return control; }
 
-    // Optional: expose mirroring bits if you want cart->mirror updated dynamically
+
     // uint8_t getMirrorMode() const { return control & 0x03; }
 
 private:
