@@ -21,10 +21,10 @@ public:
     // Tick APU at CPU clock rate (once per CPU cycle)
     void clock();
 
-    // Produce a mono sample (no resampling here yet just current mixed level)
+    // Produce a mono sample (no resampling here  current mixed level)
     float sample() const;
 
-    // Debug helpers (for your panel)
+    // Debug helpers
     uint8_t debugReg(uint16_t addr) const;
     uint8_t debugStatus4015() const;
     bool    debugFrameIRQ() const { return frame_irq; }

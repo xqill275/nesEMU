@@ -36,7 +36,6 @@ uint8_t cpu::pop() {
 
 // Fetch operand (based on addrmode result)
 uint8_t cpu::fetch() {
-    // If addressing mode is implied, fetched is already set to A by IMP
     if (lookup[opcode].addrmode == &cpu::IMP) {
         return fetched;
     } else {
@@ -46,14 +45,7 @@ uint8_t cpu::fetch() {
 }
 
 
-// Addressing modes
-// Each mode reads operand(s) from memory at PC+1/2... and then advances PC to
-// point to the next instruction (so operations can overwrite PC when needed).
 
-
-// Implied / Accumulator: some instructions use the accumulator (A) directly,
-// but we don't declare a separate ACC() in the header — IMP is used for both
-// implied and accumulator opcodes. IMP sets fetched = A and advances PC by 1.
 uint8_t cpu::IMP() {
     fetched = A;
     PC += 1;
@@ -123,8 +115,6 @@ uint8_t cpu::IND() {
     uint16_t ptr_hi = read(PC + 2);
     uint16_t ptr = (ptr_hi << 8) | ptr_lo;
 
-    // Emulate page-boundary hardware bug:
-    // if low byte is $xxFF, the high byte wraps on the same page.
     uint8_t lo = read(ptr);
     uint8_t hi = read((ptr & 0xFF00) | ((ptr + 1) & 0x00FF));
 
@@ -184,11 +174,8 @@ uint8_t cpu::NOP() {
     return 0;
 }
 
-// BRK: using IMM as addressing mode in lookup (so PC already points to next instr)
-// BRK pushes PC and P, sets I, loads vector from 0xFFFE/0xFFFF.
+
 uint8_t cpu::BRK() {
-    // At this point addrmode IMM has already advanced PC past the BRK padding
-    // Push program counter (high then low)
     uint16_t return_addr = PC+1;
     push((return_addr >> 8) & 0xFF);
     push(return_addr & 0xFF);
@@ -241,8 +228,6 @@ uint8_t cpu::LDY() {
 }
 
 uint8_t cpu::STA() {
-    // store A into addr_abs
-    //std::cout << "Writing value: " << std::hex << (int)A << " To:" << addr_abs << std::endl;
     write(addr_abs, A);
     return 0;
 }
@@ -261,22 +246,19 @@ uint8_t cpu::INY() { Y++; setZN(Y); return 0; }
 uint8_t cpu::DEX() { X--; setZN(X); return 0; }
 uint8_t cpu::DEY() { Y--; setZN(Y); return 0; }
 
-// JMP absolute: addressing mode IND or ABS already advanced PC to next instr.
-// JMP must set PC to target addr_abs.
+
 uint8_t cpu::JMP() {
     PC = addr_abs;
     return 0;
 }
 
-// JSR: addressing mode ABS advanced PC to next instruction already.
-// Push return address (PC - 1) per 6502 semantics, then set PC to target.
+
 uint8_t cpu::JSR() {
-    // Return address is PC - 1 (because PC already points to next instruction)
     uint16_t return_addr = PC - 1;
     push((return_addr >> 8) & 0xFF);
     push(return_addr & 0xFF);
 
-    // Jump to target address (addr_abs)
+
     PC = addr_abs;
     return 0;
 }
@@ -294,15 +276,14 @@ uint8_t cpu::SEI() { setFlag(I, true); return 0; }
 uint8_t cpu::CLD() { setFlag(D, false); return 0; }
 uint8_t cpu::CLC() { setFlag(C, false); return 0; }
 
-// ASL: if addressing mode is IMP (accumulator), operate on A; otherwise on memory.
+
 uint8_t cpu::ASL() {
     if (lookup[opcode].addrmode == &cpu::IMP) {
-        // Accumulator mode
         setFlag(C, (A & 0x80) != 0);
         A <<= 1;
         setZN(A);
     } else {
-        fetch(); // fetched contains memory value at addr_abs
+        fetch();
         uint8_t temp = fetched;
         setFlag(C, (temp & 0x80) != 0);
         temp <<= 1;
@@ -312,15 +293,14 @@ uint8_t cpu::ASL() {
     return 0;
 }
 
-// PHP must push P with B and U bits set
+
 uint8_t cpu::PHP() {
     uint8_t flags = P | B | U;
     push(flags);
     return 0;
 }
 
-// BPL implementation: PC already points to next instruction (after REL).
-// Branch target = PC + addr_rel
+
 uint8_t cpu::BPL() {
     if (!getFlag(N)) {
         cycles++;
@@ -333,16 +313,10 @@ uint8_t cpu::BPL() {
 
 uint8_t cpu::AND()
 {
-    // Fetch the operand (based on the current addressing mode)
     fetch();
-
-    // Perform A = A & fetched
     A = A & fetched;
-
-    // Set Z and N flags
     setZN(A);
-
-    return 1; // This instruction adds 1 cycle
+    return 1;
 }
 
 uint8_t cpu::BEQ()
@@ -364,23 +338,16 @@ uint8_t cpu::BEQ()
 
 uint8_t cpu::BIT() {
     fetch();  // fetches the value at addr_abs into `fetched`
-
     uint8_t result = A & fetched;
-
-    // Zero flag = set if (A & M) == 0
     setFlag(Z, result == 0x00);
-
-    // Bit 6 -> Overflow flag
     setFlag(V, fetched & 0x40);
-
-    // Bit 7 -> Negative flag
     setFlag(N, fetched & 0x80);
 
     return 0;
 }
 
 uint8_t cpu::ROL() {
-    fetch();  // get value (either A or memory)
+    fetch();
 
     uint8_t oldCarry = getFlag(C) ? 1 : 0;
     uint8_t result = (fetched << 1) | oldCarry;
@@ -410,7 +377,6 @@ void cpu::clock() {
         prev_opcode = opcode;
         prev_PC = PC;
 
-        //std::cout << ins.name << " - " << std::hex << (int)opcode << std::endl;
         // Run addressing mode (it will advance PC to next instruction by design)
         uint8_t add_cycles_addr = 0;
         if (ins.addrmode) add_cycles_addr = (this->*ins.addrmode)();
@@ -427,14 +393,14 @@ void cpu::clock() {
     if (cycles > 0) cycles--;
 }
 
-// stepInstruction: execute a single full instruction (blocking until cycles consumed)
+
 void cpu::stepInstruction() {
     cycles = 0;
     clock();
     while (cycles > 0) clock();
 }
 
-// reset: initialize registers and set PC from reset vector (0xFFFC/0xFFFD)
+
 void cpu::reset() {
     uint16_t lo = read(0xFFFC);
     uint16_t hi = read(0xFFFD);
@@ -444,7 +410,7 @@ void cpu::reset() {
     A = X = Y = 0x00;
     P = 0x24;
 
-    cycles = 8; // warmup cycles
+    cycles = 8;
 }
 
 void cpu::nmi() {
@@ -471,8 +437,7 @@ void cpu::irq() {
     // Maskable IRQ: ignored if I flag set
     if (getFlag(I)) return;
 
-    // If we're mid-instruction, real 6502 samples IRQ between instructions.
-    // For your "call irq() every CPU tick" approach, only take it when ready.
+    // If we're mid instruction, real 6502 samples IRQ between instructions.
     if (cycles != 0) return;
 
     // Push PC (high then low)
@@ -498,8 +463,8 @@ void cpu::irq() {
 
 uint8_t cpu::PLP() {
     P = pop();
-    P &= ~FLAGS::B;   // clear B flag
-    P |= FLAGS::U;    // set unused bit
+    P &= ~FLAGS::B;
+    P |= FLAGS::U;
     return 0;
 }
 
@@ -511,8 +476,8 @@ uint8_t cpu::SEC() {
 uint8_t cpu::RTI() {
     // Pull status register (but ensure unused flag stays set)
     P = pop();
-    P &= ~B;     // Clear Break flag (hardware behavior)
-    P |= U;      // Unused flag always set
+    P &= ~B;
+    P |= U;
 
     // Pull PC low byte, then high byte
     uint8_t lo = pop();
@@ -594,7 +559,7 @@ uint8_t cpu::ADC() {
 
     A = sum & 0xFF;
 
-    return 1;   // ADD EXTRA CYCLE if page crossed (ADC uses returned value)
+    return 1;
 }
 
 uint8_t cpu::ROR() {
@@ -669,7 +634,7 @@ uint8_t cpu::BCC() {
     if (getFlag(C) == 0) {        // Branch if Carry Clear
         cycles++;                // Branch successful → add 1 cycle
 
-        // If signed offset is negative, sign-extend it
+        // If signed offset is negative, sign extend it
         PC += addr_rel;
 
         // If branch crosses a page, add another cycle
@@ -1016,7 +981,7 @@ void cpu::buildLookup() {
 }
 
 
-// GUI helpers (unchanged logic, minor cleanup)
+// GUI helpers
 void cpu::drawFlagsGui() const {
     auto draw = [&](const char* label, bool v) {
         ImVec4 c = v ? ImVec4(0.2f,1.0f,0.2f,1.0f) : ImVec4(1.0f,0.2f,0.2f,1.0f);

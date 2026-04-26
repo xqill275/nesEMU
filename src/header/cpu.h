@@ -8,7 +8,7 @@
 class bus;
 
 
-// Optional legacy struct (unused at runtime)
+// Optional legacy struct
 struct Instruction {
     std::string name;
     uint8_t* bytes;   // not used
@@ -63,7 +63,7 @@ public:
     uint8_t read(uint16_t addr);
     void write(uint16_t addr, uint8_t data);
 
-    // GUI (you kept these in)
+    // GUI
     void drawFlagsGui() const;
     void drawStackGui() const;
 

@@ -104,12 +104,6 @@ bool Mapper009::ppuMapWrite(uint16_t addr, uint32_t& mappedAddr) {
 }
 
 void Mapper009::updateLatchesAfterRead(uint16_t addr) {
-    // Latch triggers (MMC2)
-    // $0FD8 -> latch0 = FD
-    // $0FE8 -> latch0 = FE
-    // $1FD8-$1FDF -> latch1 = FD
-    // $1FE8-$1FEF -> latch1 = FE  :contentReference[oaicite:4]{index=4}
-
     if (addr >= 0x0FD8 && addr <= 0x0FDF) latch0 = 0;        // FD
     else if (addr >= 0x0FE8 && addr <= 0x0FEF) latch0 = 1;   // FE
     else if (addr >= 0x1FD8 && addr <= 0x1FDF) latch1 = 0;   // FD

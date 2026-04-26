@@ -47,9 +47,8 @@ void ppu::connectCartridge(cartridge* c) {
     cart = c;
 }
 
-// -----------------------------
+
 // Pixel helpers for sprite0 hit
-// -----------------------------
 bool ppu::bgPixelNonZeroAt(int x, int y)
 {
     if (!(PPUMASK & 0x08)) return false;
@@ -79,7 +78,7 @@ bool ppu::bgPixelNonZeroAt(int x, int y)
 
     uint8_t tileIndex = ppuRead(nametableBase + (uint16_t)tileY * 32 + (uint16_t)tileX);
 
-    // IMPORTANT: use per-scanline snapshot
+    // IMPORTANT: use per scanline snapshot
     uint16_t patternBase = bgPatternBaseForScanline(y);
     uint16_t patternAddr = patternBase + (uint16_t)tileIndex * 16 + (uint16_t)fineY;
 
@@ -122,7 +121,7 @@ bool ppu::sprite0PixelNonZeroAt(int x, int y)
     uint16_t tileAddr = 0;
 
     if (!sprite8x16) {
-        // IMPORTANT: use per-scanline snapshot
+        // IMPORTANT: use per scanline snapshot
         uint16_t patternBase8x8 = sprPatternBaseForScanline(y);
         tileAddr = patternBase8x8 + (uint16_t)tileIndex * 16;
     } else {
@@ -142,9 +141,9 @@ bool ppu::sprite0PixelNonZeroAt(int x, int y)
     return px != 0;
 }
 
-// -----------------------------
+
 // Mirroring helper
-// -----------------------------
+
 uint16_t ppu::mapNametableAddr(uint16_t addr) const {
     addr &= 0x0FFF;
 
@@ -174,9 +173,9 @@ uint16_t ppu::mapNametableAddr(uint16_t addr) const {
     return (page * 0x0400) + offset;
 }
 
-// -----------------------------
+
 // CPU <-> PPU regs ($2000-$2007)
-// -----------------------------
+
 uint8_t ppu::cpuRead(uint16_t addr, bool readonly) {
     uint8_t data = 0x00;
     addr &= 0x0007;
@@ -272,9 +271,9 @@ void ppu::cpuWrite(uint16_t addr, uint8_t data) {
     }
 }
 
-// -----------------------------
-// PPU timing (your simplified model)
-// -----------------------------
+
+// PPU timing
+
 void ppu::clock()
 {
     // Sprite0 hit test in visible area
@@ -311,7 +310,7 @@ void ppu::clock()
         if (PPUCTRL & 0x80) nmi = true;
     }
 
-    // Pre-render clear
+    // Pre render clear
     if (scanline == 261 && cycle == 1) {
         PPUSTATUS &= ~0xE0;
         nmi = false;
@@ -360,9 +359,9 @@ void ppu::clock()
     }
 }
 
-// -----------------------------
+
 // PPU memory map
-// -----------------------------
+
 uint8_t ppu::ppuRead(uint16_t addr) {
     addr &= 0x3FFF;
     uint8_t data = 0x00;
@@ -416,9 +415,9 @@ void ppu::ppuWrite(uint16_t addr, uint8_t data) {
     }
 }
 
-// -----------------------------
+
 // Pattern table viewer
-// -----------------------------
+
 void ppu::updatePatternTable() {
     if (!cart) return;
 
@@ -452,9 +451,9 @@ void ppu::updatePatternTable() {
     }
 }
 
-// -----------------------------
-// MMC2 prefetch helper (unchanged)
-// -----------------------------
+
+// MMC2 prefetch helper
+
 void ppu::ppu_prefetch_bg_tiles_for_mmc2(ppu* self, int y, int scrollX, int scrollY,
                                         int baseNTX, int baseNTY, uint16_t patternBase)
 {
@@ -491,9 +490,9 @@ void ppu::ppu_prefetch_bg_tiles_for_mmc2(ppu* self, int y, int scrollX, int scro
     }
 }
 
-// -----------------------------
+
 // Background renderer (frame-based)
-// -----------------------------
+
 void ppu::renderBackground() {
     uint32_t bgColor = nes_colors[ppuRead(0x3F00) & 0x3F];
     frame.fill(bgColor);
@@ -508,7 +507,7 @@ void ppu::renderBackground() {
         int baseNTX = dbg_baseNTX[y];
         int baseNTY = dbg_baseNTY[y];
 
-        // IMPORTANT: per-scanline BG pattern base
+        // IMPORTANT: per scanline BG pattern base
         uint16_t patternBase = bgPatternBaseForScanline(y);
 
         int worldY = y + scrollY + baseNTY * 240;
@@ -565,9 +564,9 @@ void ppu::renderBackground() {
     }
 }
 
-// -----------------------------
+
 // Sprite renderer
-// -----------------------------
+
 void ppu::renderSprites()
 {
     if (!(PPUMASK & 0x10))
@@ -611,7 +610,7 @@ void ppu::renderSprites()
             uint16_t tileAddr = 0x0000;
 
             if (!sprite8x16) {
-                // IMPORTANT: per-scanline sprite pattern base
+                // IMPORTANT: per scanline sprite pattern base
                 int y = baseY + row;
                 uint16_t patternBase8x8 = sprPatternBaseForScanline(y);
                 tileAddr = patternBase8x8 + (uint16_t)tileIndex * 16;

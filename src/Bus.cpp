@@ -133,7 +133,6 @@ void bus::write(uint16_t addr, uint8_t data) {
         return;
     }
 
-    // Ignore everything else for now
 }
 
 
@@ -154,8 +153,7 @@ void bus::clock()
         if (dma_transfer)
         {
             // DMA dummy cycle: wait until an odd CPU cycle before starting reads/writes
-            // Use CPU-cycle parity
-            static uint64_t cpuCycleCount = 0; // local static ok, or make a member
+            static uint64_t cpuCycleCount = 0;
             cpuCycleCount++;
 
             if (dma_dummy)

@@ -20,7 +20,7 @@ static void data_callback(ma_device* pDevice, void* pOutput, const void* pInput,
 
     if (!self || !self->impl || !self->m_apu) return;
 
-    // Pull what we have; if underflow, remainder stays silent
+    // Pull what we have. if underflow, remainder stays silent
     ma_uint32 got = self->m_apu->popSamples(out, frameCount);
     (void)got;
 }

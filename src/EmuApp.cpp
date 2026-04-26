@@ -182,7 +182,7 @@ void EmuApp::drawMenuBar()
                     MessageBoxA(nullptr, "Failed to load ROM.", "Error", MB_OK | MB_ICONERROR);
 #endif
                 } else {
-                    running = false; // optional pause after load
+                    running = false;
                 }
             }
         }
@@ -415,7 +415,6 @@ int EmuApp::run()
 
         drawMenuBar();
 
-        // emu tick must happen after ImGui::NewFrame so IsKeyPressed works
         tickEmulation();
 
         drawPanels();

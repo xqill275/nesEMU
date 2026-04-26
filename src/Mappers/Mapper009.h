@@ -13,7 +13,7 @@ public:
     bool ppuMapRead(uint16_t addr, uint32_t& mappedAddr) override;
     bool ppuMapWrite(uint16_t addr, uint32_t& mappedAddr) override;
 
-    // Optional helper so cartridge can query mirroring override after mapper writes.
+
     bool hasMirroringOverride() const { return mirroringOverrideValid; }
     bool mirroringIsHorizontal() const { return mirroringHorizontal; }
 

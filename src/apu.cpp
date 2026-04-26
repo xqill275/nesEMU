@@ -549,10 +549,10 @@ uint8_t apu::triangleOutput(const Triangle& t) const {
     if (t.length_counter == 0) return 0;
     if (t.linear_counter == 0) return 0;
 
-    // Very small timer values produce ultrasonic / invalid output; commonly muted
+    // Very small timer values produce ultrasonic / invalid output. commonly muted
     if (t.timer < 2) return 0;
 
-    // 32-step triangle sequence (0..15..0..15..)
+    // 32 step triangle sequence (0..15..0..15..)
     static constexpr uint8_t seq[32] = {
         15,14,13,12,11,10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
          0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15
@@ -625,7 +625,7 @@ void apu::refillDmcSampleBuffer() {
     if (dmc.bytes_remaining == 0) return;
 
     if (!m_dmcRead) {
-        // no bus hook yet; stay silent
+        // no bus hook yet. stay silent
         return;
     }
 
@@ -712,7 +712,7 @@ uint16_t apu::sweepTargetPeriod(const Pulse& p, bool isPulse1) const
 
 bool apu::sweepMuted(const Pulse& p, bool isPulse1) const
 {
-    // If timer < 8 pulse channel is silenced (you already do this in pulseOutput)
+    // If timer < 8 pulse channel is silenced
     if (p.timer < 8) return true;
 
     // If sweep enabled and shift > 0, compute target and check overflow > 0x7FF

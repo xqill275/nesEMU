@@ -129,11 +129,9 @@ bool cartridge::cpuWrite(uint16_t addr, uint8_t data)
             auto* m1 = dynamic_cast<Mapper001*>(mapper.get());
             if (m1) {
                 // MMC1 mirroring bits: 0,1 one-screen; 2 vertical; 3 horizontal
-                // Your cart enum only supports H/V/4-screen, so:
-                uint8_t mir = (m1->getControl() & 0x03); // if you expose getControl()
+                uint8_t mir = (m1->getControl() & 0x03);
                 if (mir == 2) mirror = Mirror::VERTICAL;
                 else if (mir == 3) mirror = Mirror::HORIZONTAL;
-                // one-screen modes: pick either, most emus map them specially; you can treat as vertical for now
                 else mirror = Mirror::VERTICAL;
             }
         }
